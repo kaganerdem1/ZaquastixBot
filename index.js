@@ -47,17 +47,17 @@ app.listen(PORT, () => console.log(`✅ Web server listening on port ${PORT}.`))
 const SETTINGS = {
     NOTIFY_CHANNEL: 'notifications',
     LOG_CHANNEL: 'study-log',
-    WELCOME_CHANNEL: 'welcome-room',   // DEĞİŞTİ: welcome-room
+    WELCOME_CHANNEL: 'welcome-room',
     GENERAL_CHANNEL: 'general',
     CAM_ONLY_CHANNEL: 'cam-only',
     MEMBER_ROLE: 'Member',
-    CAMERA_CHECK_MS: 5000,
+    CAMERA_CHECK_MS: 10000, // <--- BURASI 5 SANİYEDEN 10 SANİYEYE ÇIKARILDI (10000 ms)
     TIMEZONE: 'Europe/Istanbul',
     POMODORO_COIN_PER_MIN: 2,
     VOICE_COIN_PER_MIN: 1,
     GOAL_BONUS: 50,
     WEEKLY_CHAMPION_BONUS: 200,
-    LEADERBOARD_LIMIT: 10, // <--- BURASI 30'DAN 10'A DÜŞÜRÜLDÜ
+    LEADERBOARD_LIMIT: 10, 
     WARN_LIMIT: 3,
     WARN_TIMEOUT_MS: 60 * 60 * 1000,
     SPAM_LIMIT: 5,
@@ -1110,7 +1110,6 @@ async function cameraCheck(guild, userId, channelId) {
 
         await member.voice.setChannel(null, 'Camera off in cam-only room');
 
-        // DEĞİŞTİ: Sadece özelden (DM) uyarı
         const alert = embed('⚠️ Camera Alert',
             `<@${userId}> joined **${SETTINGS.CAM_ONLY_CHANNEL}** with the camera off and was removed.`, 0xE74C3C)
             .addFields({ name: 'What to do', value: 'Turn on your camera before joining this room again.' });
@@ -1207,7 +1206,6 @@ client.on('guildMemberAdd', async member => {
     try {
         const channel = await findChannel(member.guild, SETTINGS.WELCOME_CHANNEL);
         if (!channel) return;
-        // DEĞİŞTİ: welcome-room odasına "welcome" mesajı
         await channel.send({
             content: `👋 Welcome <@${member.id}>! Read the rules and press the button below to accept them.`,
             components: [rulesButton()],
