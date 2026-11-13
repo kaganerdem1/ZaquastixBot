@@ -818,9 +818,42 @@ async function handleCommand(i) {
                 minutes,
                 endsAt: new Date(Date.now() + minutes * 60000),
             });
+
+            // LionBot tarzı interaktif panel
+            const panelEmbed = new EmbedBuilder()
+                .setColor(0x2F3136)
+                .setTitle('⏱️ Cam-only')
+                .setDescription(`> **Zamanlayıcı başlatıldı!**\n> Odaklanma süreniz: **${minutes} dakika**\n\n*Çalışırken bu mesajı sabitleyebilirsiniz.*`)
+                .addFields(
+                    { name: '⏳ Kalan Süre', value: `<t:${Math.floor((Date.now() + minutes * 60000) / 1000)}:R>`, inline: true },
+                    { name: '👤 Başlatan', value: `<@${user.id}>`, inline: true },
+                    { name: '⏰ Başlangıç', value: `<t:${Math.floor(Date.now() / 1000)}:T>`, inline: true }
+                )
+                .setFooter({ text: 'İyi çalışmalar dileriz!' });
+
+            // Butonlar
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('pomodoro_present')
+                    .setLabel('Present')
+                    .setEmoji('✅')
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId('pomodoro_options')
+                    .setLabel('Options')
+                    .setEmoji('⚙️')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('pomodoro_stop')
+                    .setLabel('Stop')
+                    .setEmoji('🛑')
+                    .setStyle(ButtonStyle.Danger)
+            );
+
             return i.reply({
-                embeds: [embed('⏱️ Pomodoro Started!',
-                    `**${minutes} minutes** of focus! I'll let you know in this channel when it's done.`, 0xFFA500)],
+                content: `📢 <@${user.id}> bir Pomodoro başlattı!`,
+                embeds: [panelEmbed],
+                components: [row],
             });
         }
 
@@ -945,7 +978,6 @@ async function handleCommand(i) {
                 )
                 .setFooter({ text: 'You earn time by studying in voice channels.' });
 
-            // Eğer komutu kullanan kişinin "Üyeleri Yönet" (ModerateMembers) yetkisi varsa, moderasyon sekmesini göster
             if (i.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
                 helpEmbed.addFields(
                     { name: '🛡️ Moderasyon', value: '`/warn` `/warnings` `/rulespanel` `/totalallist`' }
