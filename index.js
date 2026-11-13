@@ -794,15 +794,59 @@ function rulesButton() {
 }
 
 async function handleButton(i) {
-    if (i.customId !== 'accept_rules') return;
-    const role = await ensureRole(i.guild, SETTINGS.MEMBER_ROLE, 0x57F287);
-    if (!i.member.roles.cache.has(role.id)) {
-        await i.member.roles.add(role, 'Accepted the rules');
+    // Kurallar Butonu
+    if (i.customId === 'accept_rules') {
+        const role = await ensureRole(i.guild, SETTINGS.MEMBER_ROLE, 0x57F287);
+        if (!i.member.roles.cache.has(role.id)) {
+            await i.member.roles.add(role, 'Accepted the rules');
+        }
+        return i.reply({ content: '✅ You accepted the rules. Welcome to the server!', flags: MessageFlags.Ephemeral });
     }
-    return i.reply({
-        content: '✅ You accepted the rules. Welcome to the server!',
-        flags: MessageFlags.Ephemeral,
-    });
+
+    // Pomodoro Butonları
+    if (i.customId.startsWith('pomo_')) {
+        const parts = i.customId.split('_');
+        const action = parts[1];
+        const ownerId = parts[2];
+
+        // Modlar veya Pomodoroyu başlatan kişi tıklayabilir
+        const isMod = i.member.permissions.has(PermissionFlagsBits.ModerateMembers);
+        if (i.user.id !== ownerId && !isMod) {
+            return i.reply({ content: '❌ Bu işlemi sadece Pomodoroyu başlatan kişi veya bir Moderatör yapabilir.', flags: MessageFlags.Ephemeral });
+        }
+
+        if (action === 'present') {
+            return i.reply({ content: '✅ **Present!** Odada aktif olarak gözüküyorsun. İyi çalışmalar!', flags: MessageFlags.Ephemeral });
+        }
+
+        if (action === 'options') {
+            const optEmbed = new EmbedBuilder()
+                .setColor(0x3498DB)
+                .setTitle('⚙️ Pomodoro Seçenekleri')
+                .setDescription('Aşağıdaki butonlardan işlem yapabilirsin. *(Sadece sen ve modlar görebilir)*')
+                .addFields(
+                    { name: '🔄 Yeniden Başlat', value: 'Mevcut süreyi sıfırlar ve baştan başlatır.' },
+                    { name: '⏸️ Duraklat', value: 'Süreyi dondurur.' }
+                );
+
+            const optRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`pomo_reset_${ownerId}`).setLabel('Süreyi Sıfırla').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId(`pomo_pause_${ownerId}`).setLabel('Duraklat').setStyle(ButtonStyle.Secondary)
+            );
+
+            return i.reply({ embeds: [optEmbed], components: [optRow], flags: MessageFlags.Ephemeral });
+        }
+
+        if (action === 'stop') {
+            // Kullanıcı çarpıya basınca mesajdan silinir (embed kaldırılır)
+            await i.update({ content: `🛑 **Pomodoro durduruldu.**\n<@${ownerId}> odadan ayrıldı.`, embeds: [], components: [] });
+            return;
+        }
+        
+        if (action === 'reset' || action === 'pause') {
+            return i.reply({ content: '⚙️ Bu özellik şu an bakımda, ancak işlemini aldım!', flags: MessageFlags.Ephemeral });
+        }
+    }
 }
 
 async function handleCommand(i) {
@@ -819,7 +863,6 @@ async function handleCommand(i) {
                 endsAt: new Date(Date.now() + minutes * 60000),
             });
 
-            // LionBot tarzı interaktif panel
             const panelEmbed = new EmbedBuilder()
                 .setColor(0x2F3136)
                 .setTitle('⏱️ Cam-only')
@@ -829,22 +872,22 @@ async function handleCommand(i) {
                     { name: '👤 Başlatan', value: `<@${user.id}>`, inline: true },
                     { name: '⏰ Başlangıç', value: `<t:${Math.floor(Date.now() / 1000)}:T>`, inline: true }
                 )
-                .setFooter({ text: 'İyi çalışmalar dileriz!' });
+                .setFooter({ text: 'Bu paneli sadece başlatan kişi veya modlar kontrol edebilir.' });
 
-            // Butonlar
+            // Butonlara kullanıcının ID'sini gömüyoruz ki sadece o kişi bassın
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
-                    .setCustomId('pomodoro_present')
+                    .setCustomId(`pomo_present_${user.id}`)
                     .setLabel('Present')
                     .setEmoji('✅')
                     .setStyle(ButtonStyle.Success),
                 new ButtonBuilder()
-                    .setCustomId('pomodoro_options')
+                    .setCustomId(`pomo_options_${user.id}`)
                     .setLabel('Options')
                     .setEmoji('⚙️')
                     .setStyle(ButtonStyle.Primary),
                 new ButtonBuilder()
-                    .setCustomId('pomodoro_stop')
+                    .setCustomId(`pomo_stop_${user.id}`)
                     .setLabel('Stop')
                     .setEmoji('🛑')
                     .setStyle(ButtonStyle.Danger)
