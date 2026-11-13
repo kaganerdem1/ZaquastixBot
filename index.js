@@ -12,6 +12,8 @@ const {
     ButtonBuilder,
     ButtonStyle,
     ActionRowBuilder,
+    StringSelectMenuBuilder,
+    StringSelectMenuOptionBuilder,
     MessageFlags,
     AttachmentBuilder,
 } = require('discord.js');
@@ -51,13 +53,13 @@ const SETTINGS = {
     GENERAL_CHANNEL: 'general',
     CAM_ONLY_CHANNEL: 'cam-only',
     MEMBER_ROLE: 'Member',
-    CAMERA_CHECK_MS: 10000, // 10 Saniye
+    CAMERA_CHECK_MS: 10000,
     TIMEZONE: 'Europe/Istanbul',
     POMODORO_COIN_PER_MIN: 2,
     VOICE_COIN_PER_MIN: 1,
     GOAL_BONUS: 50,
     WEEKLY_CHAMPION_BONUS: 200,
-    LEADERBOARD_LIMIT: 10, // İLK 10 KİŞİ
+    LEADERBOARD_LIMIT: 10,
     WARN_LIMIT: 3,
     WARN_TIMEOUT_MS: 60 * 60 * 1000,
     SPAM_LIMIT: 5,
@@ -268,6 +270,15 @@ const importLogSchema = new mongoose.Schema({
     at: { type: Date, default: Date.now },
 });
 const ImportLog = mongoose.model('ImportLog', importLogSchema);
+
+// YENİ: Kamera Ayarları Şeması
+const videoSettingsSchema = new mongoose.Schema({
+    guildId: { type: String, required: true, unique: true },
+    gracePeriod: { type: Number, default: 15000 }, // Saniye cinsinden (15 saniye)
+    blacklistRoleId: { type: String, default: null },
+    exampleChannelId: { type: String, default: null }
+});
+const VideoSettings = mongoose.model('VideoSettings', videoSettingsSchema);
 
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('✅ MongoDB connected.'))
@@ -669,6 +680,12 @@ const commandsData = [
         .addIntegerOption(o => o.setName('minutes').setDescription('Daily goal in minutes')
             .setRequired(true).setMinValue(0).setMaxValue(720)),
 
+    // YENİ: Video Channels Ayarları
+    new SlashCommandBuilder()
+        .setName('video_channels')
+        .setDescription('Kamera odası ayarlarını düzenler (Sadece Moderatörler).')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+
     new SlashCommandBuilder().setName('help').setDescription('List all commands.'),
 
     new SlashCommandBuilder()
@@ -773,6 +790,9 @@ client.on('guildCreate', async guild => {
 // ==========================================
 client.on('interactionCreate', async interaction => {
     try {
+        if (interaction.isStringSelectMenu()) {
+            return await handleSelectMenu(interaction);
+        }
         if (interaction.isButton()) return await handleButton(interaction);
         if (!interaction.isChatInputCommand()) return;
         return await handleCommand(interaction);
@@ -809,7 +829,6 @@ async function handleButton(i) {
         const action = parts[1];
         const ownerId = parts[2];
 
-        // Modlar veya Pomodoroyu başlatan kişi tıklayabilir
         const isMod = i.member.permissions.has(PermissionFlagsBits.ModerateMembers);
         if (i.user.id !== ownerId && !isMod) {
             return i.reply({ content: '❌ Bu işlemi sadece Pomodoroyu başlatan kişi veya bir Moderatör yapabilir.', flags: MessageFlags.Ephemeral });
@@ -838,7 +857,6 @@ async function handleButton(i) {
         }
 
         if (action === 'stop') {
-            // Kullanıcı çarpıya basınca mesajdan silinir (embed kaldırılır)
             await i.update({ content: `🛑 **Pomodoro durduruldu.**\n<@${ownerId}> odadan ayrıldı.`, embeds: [], components: [] });
             return;
         }
@@ -846,6 +864,75 @@ async function handleButton(i) {
         if (action === 'reset' || action === 'pause') {
             return i.reply({ content: '⚙️ Bu özellik şu an bakımda, ancak işlemini aldım!', flags: MessageFlags.Ephemeral });
         }
+    }
+}
+
+// YENİ: Select Menu Handler (Kamera Ayarları)
+async function handleSelectMenu(i) {
+    if (i.customId === 'video_settings_select') {
+        const val = i.values[0];
+        
+        if (val === 'grace_period') {
+            const optRow = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('video_grace_select')
+                    .setPlaceholder('Süre Seçin')
+                    .addOptions(
+                        new StringSelectMenuOptionBuilder().setLabel('15 Saniye').setValue('15'),
+                        new StringSelectMenuOptionBuilder().setLabel('30 Saniye').setValue('30'),
+                        new StringSelectMenuOptionBuilder().setLabel('1 Dakika').setValue('60'),
+                        new StringSelectMenuOptionBuilder().setLabel('2 Dakika').setValue('120'),
+                    )
+            );
+            return i.update({ components: [optRow] });
+        }
+
+        if (val === 'blacklist_role') {
+            const optRow = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('video_blacklist_role_select')
+                    .setPlaceholder('Kara Liste Rolü Seçin')
+                    .addOptions(
+                        i.guild.roles.cache.filter(r => r.name !== '@everyone' && !r.managed).first(25).map(r => 
+                            new StringSelectMenuOptionBuilder().setLabel(r.name).setValue(r.id)
+                        )
+                    )
+            );
+            return i.update({ components: [optRow] });
+        }
+
+        if (val === 'example_channel') {
+            const optRow = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('video_example_channel_select')
+                    .setPlaceholder('Kamera Zorunlu Kanal Seçin')
+                    .addOptions(
+                        i.guild.channels.cache.filter(c => c.type === ChannelType.GuildVoice).first(25).map(c => 
+                            new StringSelectMenuOptionBuilder().setLabel(c.name).setValue(c.id)
+                        )
+                    )
+            );
+            return i.update({ components: [optRow] });
+        }
+    }
+
+    // Alt menülerden gelen seçimler
+    if (i.customId === 'video_grace_select') {
+        const seconds = parseInt(i.values[0]);
+        await VideoSettings.findOneAndUpdate({ guildId: i.guild.id }, { gracePeriod: seconds * 1000 }, { upsert: true });
+        return i.update({ content: `✅ Kamera açma süresi **${seconds} saniye** olarak ayarlandı.`, components: [] });
+    }
+
+    if (i.customId === 'video_blacklist_role_select') {
+        const roleId = i.values[0];
+        await VideoSettings.findOneAndUpdate({ guildId: i.guild.id }, { blacklistRoleId: roleId }, { upsert: true });
+        return i.update({ content: `✅ Kara liste rolü <@&${roleId}> olarak ayarlandı.`, components: [] });
+    }
+
+    if (i.customId === 'video_example_channel_select') {
+        const channelId = i.values[0];
+        await VideoSettings.findOneAndUpdate({ guildId: i.guild.id }, { exampleChannelId: channelId }, { upsert: true });
+        return i.update({ content: `✅ Kamera zorunlu kanal <#${channelId}> olarak ayarlandı.`, components: [] });
     }
 }
 
@@ -874,7 +961,6 @@ async function handleCommand(i) {
                 )
                 .setFooter({ text: 'Bu paneli sadece başlatan kişi veya modlar kontrol edebilir.' });
 
-            // Butonlara kullanıcının ID'sini gömüyoruz ki sadece o kişi bassın
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId(`pomo_present_${user.id}`)
@@ -898,6 +984,41 @@ async function handleCommand(i) {
                 embeds: [panelEmbed],
                 components: [row],
             });
+        }
+
+        // YENİ: /video_channels Komutu
+        case 'video_channels': {
+            let settings = await VideoSettings.findOne({ guildId: i.guild.id });
+            if (!settings) {
+                settings = await VideoSettings.create({ guildId: i.guild.id });
+            }
+
+            const blacklistRole = settings.blacklistRoleId ? `<@&${settings.blacklistRoleId}>` : 'Ayarlanmadı';
+            const exampleChannel = settings.exampleChannelId ? `<#${settings.exampleChannelId}>` : 'Ayarlanmadı';
+
+            const panelEmbed = new EmbedBuilder()
+                .setColor(0x2F3136)
+                .setTitle('Panneau de configuration des canaux vidéo')
+                .setDescription('**video_channels**\nLes membres doivent activer leur vidéo dans ces canaux.')
+                .addFields(
+                    { name: 'video_example', value: `Les membres ayant **${exampleChannel}** n'auront pas à activer leur vidéo.\n**Actuellement : ${exampleChannel}**` },
+                    { name: 'video_grace_period', value: `Le temps dont dispose un membre pour activer sa vidéo.\n**Actuellement : ${settings.gracePeriod / 1000} secondes**` },
+                    { name: 'video_blacklist', value: `Ce rôle est donné automatiquement si un membre ne garde pas sa vidéo activée.\n**Actuellement : ${blacklistRole}**` }
+                )
+                .setFooter({ text: 'Sadece Moderatörler bu ayarları değiştirebilir.' });
+
+            const row = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('video_settings_select')
+                    .setPlaceholder('Bir ayar seçin...')
+                    .addOptions(
+                        new StringSelectMenuOptionBuilder().setLabel('video_example').setDescription('Kamera zorunlu kanalı seç').setValue('example_channel'),
+                        new StringSelectMenuOptionBuilder().setLabel('video_grace_period').setDescription('Kamera açma süresini seç').setValue('grace_period'),
+                        new StringSelectMenuOptionBuilder().setLabel('video_blacklist').setDescription('Kara liste rolünü seç').setValue('blacklist_role')
+                    )
+            );
+
+            return i.reply({ embeds: [panelEmbed], components: [row] });
         }
 
         case 'task': {
@@ -1023,7 +1144,7 @@ async function handleCommand(i) {
 
             if (i.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
                 helpEmbed.addFields(
-                    { name: '🛡️ Moderasyon', value: '`/warn` `/warnings` `/rulespanel` `/totalallist`' }
+                    { name: '🛡️ Moderasyon', value: '`/warn` `/warnings` `/rulespanel` `/totalallist` `/video_channels`' }
                 );
             }
 
@@ -1080,25 +1201,40 @@ async function handleCommand(i) {
 // ==========================================
 async function warnUser(guild, member, reason, byName) {
     await Warning.create({ guildId: guild.id, userId: member.id, reason, byName });
-    const count = await Warning.countDocuments({ guildId: guild.id, userId: member.id });
-
-    await send(guild, SETTINGS.NOTIFY_CHANNEL, {
-        embeds: [embed('⚠️ Warning', `<@${member.id}> has been warned.`, 0xE67E22)
-            .addFields(
-                { name: 'Reason', value: reason },
-                { name: 'Total warnings', value: `${count}/${SETTINGS.WARN_LIMIT}` },
-                { name: 'Issued by', value: byName },
-            )],
-    });
+    let count = await Warning.countDocuments({ guildId: guild.id, userId: member.id });
 
     if (count >= SETTINGS.WARN_LIMIT) {
         await member.timeout(SETTINGS.WARN_TIMEOUT_MS, 'Warning limit reached')
             .catch(e => console.error('❌ Timeout error:', e.message));
+        
+        await Warning.deleteMany({ guildId: guild.id, userId: member.id });
+        count = 0;
+
         await send(guild, SETTINGS.NOTIFY_CHANNEL, {
             embeds: [embed('🔇 Automatic Timeout',
-                `<@${member.id}> reached ${count} warnings and was timed out for **1 hour**.`, 0x992D22)],
+                `<@${member.id}> reached ${SETTINGS.WARN_LIMIT} warnings, was timed out for **1 hour**, and their warnings were reset.`, 0x992D22)],
+        });
+        
+        await sendDM(guild, member.id, {
+            embeds: [embed('🔇 Otomatik Zaman Aşımı',
+                `**${SETTINGS.WARN_LIMIT}** uyarı sınırına ulaştığınız için **1 saat** boyunca zaman aşımına uğratıldınız. Uyarılarınız sıfırlandı.`, 0x992D22)],
         });
     }
+
+    const warnEmbed = new EmbedBuilder()
+        .setColor(0xE67E22)
+        .setTitle('⚠️ Warning')
+        .setDescription(`<@${member.id}> has been warned.`)
+        .addFields(
+            { name: 'Reason', value: reason },
+            { name: 'Issued by', value: byName },
+            { name: 'Total warnings', value: `${count}/${SETTINGS.WARN_LIMIT}` }
+        )
+        .setTimestamp();
+
+    await send(guild, SETTINGS.NOTIFY_CHANNEL, { embeds: [warnEmbed] });
+    await sendDM(guild, member.id, { embeds: [warnEmbed] });
+
     return count;
 }
 
