@@ -1409,11 +1409,22 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         if (oldChannel) cancelCameraCheck(userId);
 
         if (newChannel) {
+            // Her sunucu için ayrı kamera ayarlarını çekiyoruz
+            const vSettings = await VideoSettings.findOne({ guildId: newState.guild.id });
             const name = await voiceChannelName(newState);
-            if (name && normalize(name) === normalize(SETTINGS.CAM_ONLY_CHANNEL)) {
+            
+            // Kontrol: Veritabanında seçili bir kanal varsa ve girilen kanal o ise
+            // (Eğer veritabanında kanal seçilmemişse, eski usul isim kontrolüne devam eder)
+            const isCamOnly = vSettings?.exampleChannelId 
+                ? vSettings.exampleChannelId === newChannel 
+                : (name && normalize(name) === normalize(SETTINGS.CAM_ONLY_CHANNEL));
+
+            if (isCamOnly) {
+                // O sunucunun kendi belirlediği süreyi alıyoruz (yoksa 15 saniye)
+                const graceMs = vSettings?.gracePeriod || 15000;
                 const timer = setTimeout(
                     () => cameraCheck(newState.guild, userId, newChannel),
-                    SETTINGS.CAMERA_CHECK_MS
+                    graceMs
                 );
                 pendingCameraChecks.set(userId, timer);
             }
