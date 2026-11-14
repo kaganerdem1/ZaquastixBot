@@ -653,7 +653,7 @@ const commandsData = [
 
     new SlashCommandBuilder()
         .setName('ticket')
-        .setDescription('Moderatörlere özel bir şikayet/talep oluşturur.'),
+        .setDescription('Create a ticket for moderators.'),
 
     new SlashCommandBuilder()
         .setName('task')
@@ -680,7 +680,7 @@ const commandsData = [
 
     new SlashCommandBuilder()
         .setName('totalallist')
-        .setDescription('Bütün çalışma listesini DM olarak gönderir (Sadece Yöneticiler).')
+        .setDescription('Sends all study hours via DM (Admins only).')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     new SlashCommandBuilder()
@@ -691,7 +691,7 @@ const commandsData = [
 
     new SlashCommandBuilder()
         .setName('video_channels')
-        .setDescription('Kamera odası ayarlarını düzenler (Sadece Moderatörler).')
+        .setDescription('Configure camera-only channel settings (Mods only).')
         .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 
     new SlashCommandBuilder().setName('help').setDescription('List all commands.'),
@@ -705,7 +705,7 @@ const commandsData = [
 
     new SlashCommandBuilder()
         .setName('clearwarns')
-        .setDescription('Bir kullanıcının uyarılarını sıfırlar.')
+        .setDescription('Clear a user\'s warnings.')
         .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
         .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 
@@ -824,21 +824,21 @@ async function handleModal(i) {
         const description = i.fields.getTextInputValue('ticket_description');
         
         const ticketChannel = await findChannel(i.guild, SETTINGS.TICKET_CHANNEL);
-        if (!ticketChannel) return i.reply({ content: `❌ Sunucuda \`${SETTINGS.TICKET_CHANNEL}\` kanalı bulunamadı. Lütfen yetkililere bildirin.`, flags: MessageFlags.Ephemeral });
+        if (!ticketChannel) return i.reply({ content: `❌ The channel \`${SETTINGS.TICKET_CHANNEL}\` was not found. Please inform the staff.`, flags: MessageFlags.Ephemeral });
 
         const staffRole = i.guild.roles.cache.find(r => r.name === SETTINGS.STAFF_ROLE_NAME || r.name === SETTINGS.STAFF_ROLE_NAME.replace('@', ''));
         const staffMention = staffRole ? `<@&${staffRole.id}>` : SETTINGS.STAFF_ROLE_NAME;
 
         const embedMsg = new EmbedBuilder()
             .setColor(0xFFA500)
-            .setTitle('🎫 Yeni Ticket / Şikayet')
-            .setDescription(`**Kullanıcı:** <@${i.user.id}> (\`${i.user.tag}\`)\n\n**Konu:** ${subject}\n\n**Açıklama:**\n${description}`)
-            .setFooter({ text: `Kullanıcı ID: ${i.user.id}` })
+            .setTitle('🎫 New Ticket / Report')
+            .setDescription(`**User:** <@${i.user.id}> (\`${i.user.tag}\`)\n\n**Subject:** ${subject}\n\n**Description:**\n${description}`)
+            .setFooter({ text: `User ID: ${i.user.id}` })
             .setTimestamp();
 
         await ticketChannel.send({ content: `${staffMention}`, embeds: [embedMsg] });
 
-        return i.reply({ content: '✅ Ticketiniz başarıyla oluşturuldu ve yetkililere iletildi. Lütfen bekleyin, size özelden dönüş yapılabilir.', flags: MessageFlags.Ephemeral });
+        return i.reply({ content: '✅ Your ticket has been created and sent to the staff. Please wait for a response via DM.', flags: MessageFlags.Ephemeral });
     }
 }
 
@@ -867,38 +867,38 @@ async function handleButton(i) {
 
         const isMod = i.member.permissions.has(PermissionFlagsBits.ModerateMembers);
         if (i.user.id !== ownerId && !isMod) {
-            return i.reply({ content: '❌ Bu işlemi sadece Pomodoroyu başlatan kişi veya bir Moderatör yapabilir.', flags: MessageFlags.Ephemeral });
+            return i.reply({ content: '❌ Only the person who started this Pomodoro or a Moderator can use these buttons.', flags: MessageFlags.Ephemeral });
         }
 
         if (action === 'present') {
-            return i.reply({ content: '✅ **Present!** Odada aktif olarak gözüküyorsun. İyi çalışmalar!', flags: MessageFlags.Ephemeral });
+            return i.reply({ content: '✅ **Present!** You are marked as active. Good luck with your studies!', flags: MessageFlags.Ephemeral });
         }
 
         if (action === 'options') {
             const optEmbed = new EmbedBuilder()
                 .setColor(0x3498DB)
-                .setTitle('⚙️ Pomodoro Seçenekleri')
-                .setDescription('Aşağıdaki butonlardan işlem yapabilirsin. *(Sadece sen ve modlar görebilir)*')
+                .setTitle('⚙️ Pomodoro Options')
+                .setDescription('Use the buttons below to manage this timer. *(Only you and mods can see this)*')
                 .addFields(
-                    { name: '🔄 Yeniden Başlat', value: 'Mevcut süreyi sıfırlar ve baştan başlatır.' },
-                    { name: '⏸️ Duraklat', value: 'Süreyi dondurur.' }
+                    { name: '🔄 Restart', value: 'Resets the current timer and starts over.' },
+                    { name: '⏸️ Pause', value: 'Pauses the timer.' }
                 );
 
             const optRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`pomo_reset_${ownerId}`).setLabel('Süreyi Sıfırla').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId(`pomo_pause_${ownerId}`).setLabel('Duraklat').setStyle(ButtonStyle.Secondary)
+                new ButtonBuilder().setCustomId(`pomo_reset_${ownerId}`).setLabel('Reset Timer').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId(`pomo_pause_${ownerId}`).setLabel('Pause').setStyle(ButtonStyle.Secondary)
             );
 
             return i.reply({ embeds: [optEmbed], components: [optRow], flags: MessageFlags.Ephemeral });
         }
 
         if (action === 'stop') {
-            await i.update({ content: `🛑 **Pomodoro durduruldu.**\n<@${ownerId}> odadan ayrıldı.`, embeds: [], components: [] });
+            await i.update({ content: `🛑 **Pomodoro stopped.**\n<@${ownerId}> has left the room.`, embeds: [], components: [] });
             return;
         }
         
         if (action === 'reset' || action === 'pause') {
-            return i.reply({ content: '⚙️ Bu özellik şu an bakımda, ancak işlemini aldım!', flags: MessageFlags.Ephemeral });
+            return i.reply({ content: '⚙️ This feature is currently under maintenance.', flags: MessageFlags.Ephemeral });
         }
     }
 }
@@ -911,12 +911,12 @@ async function handleSelectMenu(i) {
             const optRow = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
                     .setCustomId('video_grace_select')
-                    .setPlaceholder('Süre Seçin')
+                    .setPlaceholder('Select Duration')
                     .addOptions(
-                        new StringSelectMenuOptionBuilder().setLabel('15 Saniye').setValue('15'),
-                        new StringSelectMenuOptionBuilder().setLabel('30 Saniye').setValue('30'),
-                        new StringSelectMenuOptionBuilder().setLabel('1 Dakika').setValue('60'),
-                        new StringSelectMenuOptionBuilder().setLabel('2 Dakika').setValue('120'),
+                        new StringSelectMenuOptionBuilder().setLabel('15 Seconds').setValue('15'),
+                        new StringSelectMenuOptionBuilder().setLabel('30 Seconds').setValue('30'),
+                        new StringSelectMenuOptionBuilder().setLabel('1 Minute').setValue('60'),
+                        new StringSelectMenuOptionBuilder().setLabel('2 Minutes').setValue('120'),
                     )
             );
             return i.update({ components: [optRow] });
@@ -926,7 +926,7 @@ async function handleSelectMenu(i) {
             const optRow = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
                     .setCustomId('video_blacklist_role_select')
-                    .setPlaceholder('Kara Liste Rolü Seçin')
+                    .setPlaceholder('Select Blacklist Role')
                     .addOptions(
                         i.guild.roles.cache.filter(r => r.name !== '@everyone' && !r.managed).first(25).map(r => 
                             new StringSelectMenuOptionBuilder().setLabel(r.name).setValue(r.id)
@@ -940,7 +940,7 @@ async function handleSelectMenu(i) {
             const optRow = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
                     .setCustomId('video_example_channel_select')
-                    .setPlaceholder('Kamera Zorunlu Kanal Seçin')
+                    .setPlaceholder('Select Camera-Only Channel')
                     .addOptions(
                         i.guild.channels.cache.filter(c => c.type === ChannelType.GuildVoice).first(25).map(c => 
                             new StringSelectMenuOptionBuilder().setLabel(c.name).setValue(c.id)
@@ -954,19 +954,19 @@ async function handleSelectMenu(i) {
     if (i.customId === 'video_grace_select') {
         const seconds = parseInt(i.values[0]);
         await VideoSettings.findOneAndUpdate({ guildId: i.guild.id }, { gracePeriod: seconds * 1000 }, { upsert: true });
-        return i.update({ content: `✅ Kamera açma süresi **${seconds} saniye** olarak ayarlandı.`, components: [] });
+        return i.update({ content: `✅ Camera grace period set to **${seconds} seconds**.`, components: [] });
     }
 
     if (i.customId === 'video_blacklist_role_select') {
         const roleId = i.values[0];
         await VideoSettings.findOneAndUpdate({ guildId: i.guild.id }, { blacklistRoleId: roleId }, { upsert: true });
-        return i.update({ content: `✅ Kara liste rolü <@&${roleId}> olarak ayarlandı.`, components: [] });
+        return i.update({ content: `✅ Blacklist role set to <@&${roleId}>.`, components: [] });
     }
 
     if (i.customId === 'video_example_channel_select') {
         const channelId = i.values[0];
         await VideoSettings.findOneAndUpdate({ guildId: i.guild.id }, { exampleChannelId: channelId }, { upsert: true });
-        return i.update({ content: `✅ Kamera zorunlu kanal <#${channelId}> olarak ayarlandı.`, components: [] });
+        return i.update({ content: `✅ Camera-only channel set to <#${channelId}>.`, components: [] });
     }
 }
 
@@ -987,13 +987,13 @@ async function handleCommand(i) {
             const panelEmbed = new EmbedBuilder()
                 .setColor(0x2F3136)
                 .setTitle('⏱️ Cam-only')
-                .setDescription(`> **Zamanlayıcı başlatıldı!**\n> Odaklanma süreniz: **${minutes} dakika**\n\n*Çalışırken bu mesajı sabitleyebilirsiniz.*`)
+                .setDescription(`> **Timer started!**\n> Focus duration: **${minutes} minutes**\n\n*You can pin this message while studying.*`)
                 .addFields(
-                    { name: '⏳ Kalan Süre', value: `<t:${Math.floor((Date.now() + minutes * 60000) / 1000)}:R>`, inline: true },
-                    { name: '👤 Başlatan', value: `<@${user.id}>`, inline: true },
-                    { name: '⏰ Başlangıç', value: `<t:${Math.floor(Date.now() / 1000)}:T>`, inline: true }
+                    { name: '⏳ Time Left', value: `<t:${Math.floor((Date.now() + minutes * 60000) / 1000)}:R>`, inline: true },
+                    { name: '👤 Started by', value: `<@${user.id}>`, inline: true },
+                    { name: '⏰ Start Time', value: `<t:${Math.floor(Date.now() / 1000)}:T>`, inline: true }
                 )
-                .setFooter({ text: 'Bu paneli sadece başlatan kişi veya modlar kontrol edebilir.' });
+                .setFooter({ text: 'Only the creator or mods can control this panel.' });
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
@@ -1014,7 +1014,7 @@ async function handleCommand(i) {
             );
 
             return i.reply({
-                content: `📢 <@${user.id}> bir Pomodoro başlattı!`,
+                content: `📢 <@${user.id}> started a Pomodoro!`,
                 embeds: [panelEmbed],
                 components: [row],
             });
@@ -1023,21 +1023,21 @@ async function handleCommand(i) {
         case 'ticket': {
             const modal = new ModalBuilder()
                 .setCustomId('ticket_modal')
-                .setTitle('Şikayet / Ticket Oluştur');
+                .setTitle('Create Ticket / Report');
 
             const subjectInput = new TextInputBuilder()
                 .setCustomId('ticket_subject')
-                .setLabel('Konu')
+                .setLabel('Subject')
                 .setStyle(TextInputStyle.Short)
-                .setPlaceholder('Kısa bir başlık girin (örn: Kural İhlali)')
+                .setPlaceholder('Enter a short title (e.g., Rule Violation)')
                 .setRequired(true)
                 .setMaxLength(100);
 
             const descInput = new TextInputBuilder()
                 .setCustomId('ticket_description')
-                .setLabel('Şikayetiniz / Talebiniz')
+                .setLabel('Description')
                 .setStyle(TextInputStyle.Paragraph)
-                .setPlaceholder('Lütfen durumu detaylıca açıklayın...')
+                .setPlaceholder('Please describe the situation in detail...')
                 .setRequired(true)
                 .setMaxLength(1500);
 
@@ -1056,28 +1056,28 @@ async function handleCommand(i) {
                 settings = await VideoSettings.create({ guildId: i.guild.id });
             }
 
-            const blacklistRole = settings.blacklistRoleId ? `<@&${settings.blacklistRoleId}>` : 'Ayarlanmadı';
-            const exampleChannel = settings.exampleChannelId ? `<#${settings.exampleChannelId}>` : 'Ayarlanmadı';
+            const blacklistRole = settings.blacklistRoleId ? `<@&${settings.blacklistRoleId}>` : 'Not configured';
+            const exampleChannel = settings.exampleChannelId ? `<#${settings.exampleChannelId}>` : 'Not configured';
 
             const panelEmbed = new EmbedBuilder()
                 .setColor(0x2F3136)
-                .setTitle('Panneau de configuration des canaux vidéo')
-                .setDescription('**video_channels**\nLes membres doivent activer leur vidéo dans ces canaux.')
+                .setTitle('Video Channels Configuration Panel')
+                .setDescription('**video_channels**\nMembers must enable their video in these channels.')
                 .addFields(
-                    { name: 'video_example', value: `Les membres ayant **${exampleChannel}** n'auront pas à activer leur vidéo.\n**Actuellement : ${exampleChannel}**` },
-                    { name: 'video_grace_period', value: `Le temps dont dispose un membre pour activer sa vidéo.\n**Actuellement : ${settings.gracePeriod / 1000} secondes**` },
-                    { name: 'video_blacklist', value: `Ce rôle est donné automatiquement si un membre ne garde pas sa vidéo activée.\n**Actuellement : ${blacklistRole}**` }
+                    { name: 'video_example', value: `Members with **${exampleChannel}** will not need to enable their video.\n**Currently: ${exampleChannel}**` },
+                    { name: 'video_grace_period', value: `The time a member has to enable their video.\n**Currently: ${settings.gracePeriod / 1000} seconds**` },
+                    { name: 'video_blacklist', value: `This role is given automatically if a member does not keep their video enabled.\n**Currently: ${blacklistRole}**` }
                 )
-                .setFooter({ text: 'Sadece Moderatörler bu ayarları değiştirebilir.' });
+                .setFooter({ text: 'Only Moderators can change these settings.' });
 
             const row = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
                     .setCustomId('video_settings_select')
-                    .setPlaceholder('Bir ayar seçin...')
+                    .setPlaceholder('Select a setting...')
                     .addOptions(
-                        new StringSelectMenuOptionBuilder().setLabel('video_example').setDescription('Kamera zorunlu kanalı seç').setValue('example_channel'),
-                        new StringSelectMenuOptionBuilder().setLabel('video_grace_period').setDescription('Kamera açma süresini seç').setValue('grace_period'),
-                        new StringSelectMenuOptionBuilder().setLabel('video_blacklist').setDescription('Kara liste rolünü seç').setValue('blacklist_role')
+                        new StringSelectMenuOptionBuilder().setLabel('video_example').setDescription('Select the camera-only channel').setValue('example_channel'),
+                        new StringSelectMenuOptionBuilder().setLabel('video_grace_period').setDescription('Select the grace period').setValue('grace_period'),
+                        new StringSelectMenuOptionBuilder().setLabel('video_blacklist').setDescription('Select the blacklist role').setValue('blacklist_role')
                     )
             );
 
@@ -1152,11 +1152,11 @@ async function handleCommand(i) {
                 const allUsers = await User.find({ totalSec: { $gt: 0 } }).sort({ totalSec: -1 }).lean();
                 
                 if (!allUsers.length) {
-                    return i.editReply('📭 Veritabanında kayıtlı çalışma verisi bulunamadı.');
+                    return i.editReply('📭 No study data found in the database.');
                 }
 
                 const chunks = [];
-                let currentChunk = '📋 **TÜM ÇALIŞMA LİSTESİ (ALL-TIME)**\n\n';
+                let currentChunk = '📋 **ALL-TIME STUDY LIST**\n\n';
                 
                 allUsers.forEach((u, index) => {
                     const line = `**${index + 1}.** ${u.username} (\`${u.userId}\`) - **${formatTime(u.totalSec)}**\n`;
@@ -1172,11 +1172,11 @@ async function handleCommand(i) {
                     await user.send(chunk);
                 }
                 
-                return i.editReply(`✅ Toplam **${allUsers.length}** kişinin çalışma listesi başarıyla özel mesaj (DM) olarak gönderildi.`);
+                return i.editReply(`✅ The study list for **${allUsers.length}** users has been sent via DM.`);
                 
             } catch (err) {
-                console.error('❌ totalallist komut hatası:', err);
-                return i.editReply('❌ Listeyi DM olarak gönderemedim. Lütfen özel mesajlarınızın (DM) açık olduğundan emin olun.');
+                console.error('❌ totalallist command error:', err);
+                return i.editReply('❌ Could not send the list via DM. Please make sure your DMs are open.');
             }
         }
 
@@ -1202,13 +1202,13 @@ async function handleCommand(i) {
                 .addFields(
                     { name: '⏱️ Study', value: '`/pomodoro` `/goal` `/stats` `/leaderboard`' },
                     { name: '📝 Tasks', value: '`/task add` `/task list` `/task complete` `/task delete`' },
-                    { name: '🎫 Destek', value: '`/ticket`' }
+                    { name: '🎫 Support', value: '`/ticket`' }
                 )
                 .setFooter({ text: 'You earn time by studying in voice channels.' });
 
             if (i.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
                 helpEmbed.addFields(
-                    { name: '🛡️ Moderasyon', value: '`/warn` `/clearwarns` `/warnings` `/rulespanel` `/totalallist` `/video_channels`' }
+                    { name: '🛡️ Moderation', value: '`/warn` `/clearwarns` `/warnings` `/rulespanel` `/totalallist` `/video_channels`' }
                 );
             }
 
@@ -1231,7 +1231,7 @@ async function handleCommand(i) {
         case 'clearwarns': {
             const target = i.options.getUser('user');
             await Warning.deleteMany({ guildId: i.guild.id, userId: target.id });
-            return i.reply({ content: `✅ <@${target.id}> adlı kullanıcının tüm uyarıları başarıyla silindi.`, flags: MessageFlags.Ephemeral });
+            return i.reply({ content: `✅ All warnings for <@${target.id}> have been successfully cleared.`, flags: MessageFlags.Ephemeral });
         }
 
         case 'warnings': {
@@ -1281,13 +1281,13 @@ async function warnUser(guild, member, reason, byName) {
         count = 0;
 
         await send(guild, SETTINGS.TICKET_CHANNEL, {
-            embeds: [embed('🔇 Otomatik Zaman Aşımı',
-                `<@${member.id}> adlı kullanıcı ${SETTINGS.WARN_LIMIT} uyarı sınırına ulaştığı için **1 saat** boyunca zaman aşımına uğratıldı ve uyarıları sıfırlandı.`, 0x992D22)],
+            embeds: [embed('🔇 Automatic Timeout',
+                `<@${member.id}> reached ${SETTINGS.WARN_LIMIT} warnings, was timed out for **1 hour**, and their warnings were reset.`, 0x992D22)],
         });
         
         await sendDM(guild, member.id, {
-            embeds: [embed('🔇 Otomatik Zaman Aşımı',
-                `**${SETTINGS.WARN_LIMIT}** uyarı sınırına ulaştığınız için **1 saat** boyunca zaman aşımına uğratıldınız. Uyarılarınız sıfırlandı.`, 0x992D22)],
+            embeds: [embed('🔇 Automatic Timeout',
+                `You have reached **${SETTINGS.WARN_LIMIT}** warnings and have been timed out for **1 hour**. Your warnings have been reset.`, 0x992D22)],
         });
     }
 
@@ -1459,13 +1459,13 @@ client.on('messageCreate', async message => {
                 .catch(e => console.error('❌ Spam timeout error:', e.message));
             
             await send(guild, SETTINGS.TICKET_CHANNEL, {
-                embeds: [embed('🚫 Spam Engellendi',
-                    `<@${message.author.id}> adlı kullanıcı **5 dakika** boyunca spam yaptığı için zaman aşımına uğratıldı.`, 0xE74C3C)],
+                embeds: [embed('🚫 Spam Blocked',
+                    `<@${message.author.id}> was timed out for **5 minutes** for spamming.`, 0xE74C3C)],
             });
 
             await sendDM(guild, message.author.id, {
-                embeds: [embed('🚫 Spam Engellendi',
-                    `**5 dakika** boyunca spam yaptığınız için zaman aşımına uğratıldınız.`, 0xE74C3C)],
+                embeds: [embed('🚫 Spam Blocked',
+                    `You were timed out for **5 minutes** for spamming.`, 0xE74C3C)],
             });
         }
     } catch (err) {
@@ -1478,11 +1478,9 @@ client.on('messageCreate', async message => {
 // ==========================================
 client.on('guildMemberAdd', async member => {
     try {
-        // Rules kanalını bul
         const rulesChannel = await findChannel(member.guild, SETTINGS.RULES_CHANNEL);
         const rulesMention = rulesChannel ? `<#${rulesChannel.id}>` : `#${SETTINGS.RULES_CHANNEL}`;
 
-        // Sadece özelden (DM) mesaj at
         await sendDM(member.guild, member.id, {
             embeds: [
                 new EmbedBuilder()
