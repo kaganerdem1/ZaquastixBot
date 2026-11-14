@@ -52,8 +52,8 @@ app.listen(PORT, () => console.log(`✅ Web server listening on port ${PORT}.`))
 const SETTINGS = {
     NOTIFY_CHANNEL: 'commands-bot',
     LOG_CHANNEL: 'commands-bot',
-    WELCOME_CHANNEL: 'welcome-room', // Karşılama kanalı
-    RULES_CHANNEL: 'rules',          // Kurallar kanalı (Yeni eklenen)
+    WELCOME_CHANNEL: 'welcome-room',
+    RULES_CHANNEL: 'rules',
     GENERAL_CHANNEL: 'general-chat',
     CAM_ONLY_CHANNEL: 'cam-only',
     TICKET_CHANNEL: 'mod-ticket',
@@ -1478,16 +1478,19 @@ client.on('messageCreate', async message => {
 // ==========================================
 client.on('guildMemberAdd', async member => {
     try {
-        const channel = await findChannel(member.guild, SETTINGS.WELCOME_CHANNEL);
-        if (!channel) return;
-        
         // Rules kanalını bul
         const rulesChannel = await findChannel(member.guild, SETTINGS.RULES_CHANNEL);
         const rulesMention = rulesChannel ? `<#${rulesChannel.id}>` : `#${SETTINGS.RULES_CHANNEL}`;
 
-        // Buton eklemeden sadece yönlendirme mesajı at
-        await channel.send({
-            content: `👋 Welcome <@${member.id}>! Please read the rules in ${rulesMention} and press the button there to accept them.`,
+        // Sadece özelden (DM) mesaj at
+        await sendDM(member.guild, member.id, {
+            embeds: [
+                new EmbedBuilder()
+                    .setColor(0x57F287)
+                    .setTitle('Welcome!')
+                    .setDescription(`👋 Hello <@${member.id}>! Welcome to the server.\n\nPlease go to the ${rulesMention} channel, read the rules, and click the green checkmark (✅) to accept them.`)
+                    .setTimestamp()
+            ]
         });
     } catch (err) {
         console.error('❌ Welcome message error:', err);
