@@ -52,10 +52,12 @@ app.listen(PORT, () => console.log(`✅ Web server listening on port ${PORT}.`))
 const SETTINGS = {
     NOTIFY_CHANNEL: 'commands-bot',
     LOG_CHANNEL: 'commands-bot',
-    WELCOME_CHANNEL: 'welcome-room',
+    WELCOME_CHANNEL: 'welcome-room', // Karşılama kanalı
+    RULES_CHANNEL: 'rules',          // Kurallar kanalı (Yeni eklenen)
     GENERAL_CHANNEL: 'general-chat',
     CAM_ONLY_CHANNEL: 'cam-only',
-    TICKET_CHANNEL: 'mod-ticket', // Yeni ticket kanalı
+    TICKET_CHANNEL: 'mod-ticket',
+    STAFF_ROLE_NAME: '@STAFF',
     MEMBER_ROLE: 'Member',
     CAMERA_CHECK_MS: 10000,
     TIMEZONE: 'Europe/Istanbul',
@@ -751,6 +753,7 @@ async function setupGuild(guild) {
     try {
         await ensureChannel(guild, SETTINGS.NOTIFY_CHANNEL);
         await ensureChannel(guild, SETTINGS.WELCOME_CHANNEL);
+        await ensureChannel(guild, SETTINGS.RULES_CHANNEL);
         await ensureChannel(guild, SETTINGS.GENERAL_CHANNEL);
         await ensureChannel(guild, SETTINGS.CAM_ONLY_CHANNEL, ChannelType.GuildVoice);
 
@@ -823,6 +826,9 @@ async function handleModal(i) {
         const ticketChannel = await findChannel(i.guild, SETTINGS.TICKET_CHANNEL);
         if (!ticketChannel) return i.reply({ content: `❌ Sunucuda \`${SETTINGS.TICKET_CHANNEL}\` kanalı bulunamadı. Lütfen yetkililere bildirin.`, flags: MessageFlags.Ephemeral });
 
+        const staffRole = i.guild.roles.cache.find(r => r.name === SETTINGS.STAFF_ROLE_NAME || r.name === SETTINGS.STAFF_ROLE_NAME.replace('@', ''));
+        const staffMention = staffRole ? `<@&${staffRole.id}>` : SETTINGS.STAFF_ROLE_NAME;
+
         const embedMsg = new EmbedBuilder()
             .setColor(0xFFA500)
             .setTitle('🎫 Yeni Ticket / Şikayet')
@@ -830,7 +836,7 @@ async function handleModal(i) {
             .setFooter({ text: `Kullanıcı ID: ${i.user.id}` })
             .setTimestamp();
 
-        await ticketChannel.send({ embeds: [embedMsg] });
+        await ticketChannel.send({ content: `${staffMention}`, embeds: [embedMsg] });
 
         return i.reply({ content: '✅ Ticketiniz başarıyla oluşturuldu ve yetkililere iletildi. Lütfen bekleyin, size özelden dönüş yapılabilir.', flags: MessageFlags.Ephemeral });
     }
@@ -1274,9 +1280,9 @@ async function warnUser(guild, member, reason, byName) {
         await Warning.deleteMany({ guildId: guild.id, userId: member.id });
         count = 0;
 
-        await send(guild, SETTINGS.NOTIFY_CHANNEL, {
-            embeds: [embed('🔇 Automatic Timeout',
-                `<@${member.id}> reached ${SETTINGS.WARN_LIMIT} warnings, was timed out for **1 hour**, and their warnings were reset.`, 0x992D22)],
+        await send(guild, SETTINGS.TICKET_CHANNEL, {
+            embeds: [embed('🔇 Otomatik Zaman Aşımı',
+                `<@${member.id}> adlı kullanıcı ${SETTINGS.WARN_LIMIT} uyarı sınırına ulaştığı için **1 saat** boyunca zaman aşımına uğratıldı ve uyarıları sıfırlandı.`, 0x992D22)],
         });
         
         await sendDM(guild, member.id, {
@@ -1296,7 +1302,7 @@ async function warnUser(guild, member, reason, byName) {
         )
         .setTimestamp();
 
-    await send(guild, SETTINGS.NOTIFY_CHANNEL, { embeds: [warnEmbed] });
+    await send(guild, SETTINGS.TICKET_CHANNEL, { embeds: [warnEmbed] });
     await sendDM(guild, member.id, { embeds: [warnEmbed] });
 
     return count;
@@ -1344,7 +1350,6 @@ async function endSession(guild, userId, name) {
         ? `This session: **${formatTime(seconds)}**`
         : 'This session was under 1 second';
 
-    // Odadan çıkınca özelden atılan mesaj (Senin istediğin görseldeki gibi)
     await sendDM(guild, userId, {
         embeds: [embed('🔴 You left the room',
             `${summary}.\n📚 Total today: **${formatTime(todaySec)}**.`, 0xE74C3C)],
@@ -1452,9 +1457,15 @@ client.on('messageCreate', async message => {
             spamTracker.delete(message.author.id);
             await message.member.timeout(SETTINGS.SPAM_TIMEOUT_MS, 'Spam')
                 .catch(e => console.error('❌ Spam timeout error:', e.message));
-            await send(guild, SETTINGS.NOTIFY_CHANNEL, {
-                embeds: [embed('🚫 Spam Blocked',
-                    `<@${message.author.id}> was timed out for **5 minutes** for spamming.`, 0xE74C3C)],
+            
+            await send(guild, SETTINGS.TICKET_CHANNEL, {
+                embeds: [embed('🚫 Spam Engellendi',
+                    `<@${message.author.id}> adlı kullanıcı **5 dakika** boyunca spam yaptığı için zaman aşımına uğratıldı.`, 0xE74C3C)],
+            });
+
+            await sendDM(guild, message.author.id, {
+                embeds: [embed('🚫 Spam Engellendi',
+                    `**5 dakika** boyunca spam yaptığınız için zaman aşımına uğratıldınız.`, 0xE74C3C)],
             });
         }
     } catch (err) {
@@ -1469,9 +1480,14 @@ client.on('guildMemberAdd', async member => {
     try {
         const channel = await findChannel(member.guild, SETTINGS.WELCOME_CHANNEL);
         if (!channel) return;
+        
+        // Rules kanalını bul
+        const rulesChannel = await findChannel(member.guild, SETTINGS.RULES_CHANNEL);
+        const rulesMention = rulesChannel ? `<#${rulesChannel.id}>` : `#${SETTINGS.RULES_CHANNEL}`;
+
+        // Buton eklemeden sadece yönlendirme mesajı at
         await channel.send({
-            content: `👋 Welcome <@${member.id}>! Read the rules and press the button below to accept them.`,
-            components: [rulesButton()],
+            content: `👋 Welcome <@${member.id}>! Please read the rules in ${rulesMention} and press the button there to accept them.`,
         });
     } catch (err) {
         console.error('❌ Welcome message error:', err);
