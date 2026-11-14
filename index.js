@@ -271,10 +271,9 @@ const importLogSchema = new mongoose.Schema({
 });
 const ImportLog = mongoose.model('ImportLog', importLogSchema);
 
-// YENİ: Kamera Ayarları Şeması
 const videoSettingsSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
-    gracePeriod: { type: Number, default: 15000 }, // Saniye cinsinden (15 saniye)
+    gracePeriod: { type: Number, default: 15000 },
     blacklistRoleId: { type: String, default: null },
     exampleChannelId: { type: String, default: null }
 });
@@ -680,7 +679,6 @@ const commandsData = [
         .addIntegerOption(o => o.setName('minutes').setDescription('Daily goal in minutes')
             .setRequired(true).setMinValue(0).setMaxValue(720)),
 
-    // YENİ: Video Channels Ayarları
     new SlashCommandBuilder()
         .setName('video_channels')
         .setDescription('Kamera odası ayarlarını düzenler (Sadece Moderatörler).')
@@ -814,7 +812,6 @@ function rulesButton() {
 }
 
 async function handleButton(i) {
-    // Kurallar Butonu
     if (i.customId === 'accept_rules') {
         const role = await ensureRole(i.guild, SETTINGS.MEMBER_ROLE, 0x57F287);
         if (!i.member.roles.cache.has(role.id)) {
@@ -823,7 +820,6 @@ async function handleButton(i) {
         return i.reply({ content: '✅ You accepted the rules. Welcome to the server!', flags: MessageFlags.Ephemeral });
     }
 
-    // Pomodoro Butonları
     if (i.customId.startsWith('pomo_')) {
         const parts = i.customId.split('_');
         const action = parts[1];
@@ -867,7 +863,6 @@ async function handleButton(i) {
     }
 }
 
-// YENİ: Select Menu Handler (Kamera Ayarları)
 async function handleSelectMenu(i) {
     if (i.customId === 'video_settings_select') {
         const val = i.values[0];
@@ -916,7 +911,6 @@ async function handleSelectMenu(i) {
         }
     }
 
-    // Alt menülerden gelen seçimler
     if (i.customId === 'video_grace_select') {
         const seconds = parseInt(i.values[0]);
         await VideoSettings.findOneAndUpdate({ guildId: i.guild.id }, { gracePeriod: seconds * 1000 }, { upsert: true });
@@ -986,7 +980,6 @@ async function handleCommand(i) {
             });
         }
 
-        // YENİ: /video_channels Komutu
         case 'video_channels': {
             let settings = await VideoSettings.findOne({ guildId: i.guild.id });
             if (!settings) {
@@ -1280,6 +1273,7 @@ async function endSession(guild, userId, name) {
         ? `This session: **${formatTime(seconds)}**`
         : 'This session was under 1 second';
 
+    // Odadan çıkınca özelden atılan mesaj (Senin istediğin görseldeki gibi)
     await sendDM(guild, userId, {
         embeds: [embed('🔴 You left the room',
             `${summary}.\n📚 Total today: **${formatTime(todaySec)}**.`, 0xE74C3C)],
