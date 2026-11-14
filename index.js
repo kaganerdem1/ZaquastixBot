@@ -16,6 +16,9 @@ const {
     StringSelectMenuOptionBuilder,
     MessageFlags,
     AttachmentBuilder,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle,
 } = require('discord.js');
 const mongoose = require('mongoose');
 const express = require('express');
@@ -47,11 +50,12 @@ app.listen(PORT, () => console.log(`✅ Web server listening on port ${PORT}.`))
 // 3) SETTINGS
 // ==========================================
 const SETTINGS = {
-    NOTIFY_CHANNEL: 'notifications',
-    LOG_CHANNEL: 'study-log',
+    NOTIFY_CHANNEL: 'commands-bot',
+    LOG_CHANNEL: 'commands-bot',
     WELCOME_CHANNEL: 'welcome-room',
-    GENERAL_CHANNEL: 'general',
+    GENERAL_CHANNEL: 'general-chat',
     CAM_ONLY_CHANNEL: 'cam-only',
+    TICKET_CHANNEL: 'mod-ticket', // Yeni ticket kanalı
     MEMBER_ROLE: 'Member',
     CAMERA_CHECK_MS: 10000,
     TIMEZONE: 'Europe/Istanbul',
@@ -646,6 +650,10 @@ const commandsData = [
             .setRequired(true).setMinValue(1).setMaxValue(180)),
 
     new SlashCommandBuilder()
+        .setName('ticket')
+        .setDescription('Moderatörlere özel bir şikayet/talep oluşturur.'),
+
+    new SlashCommandBuilder()
         .setName('task')
         .setDescription('Manage your to-do list.')
         .addSubcommand(s => s.setName('add').setDescription('Add a new task.')
@@ -691,6 +699,12 @@ const commandsData = [
         .setDescription('Warn a user.')
         .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
         .addStringOption(o => o.setName('reason').setDescription('Reason'))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+
+    new SlashCommandBuilder()
+        .setName('clearwarns')
+        .setDescription('Bir kullanıcının uyarılarını sıfırlar.')
+        .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
         .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 
     new SlashCommandBuilder()
@@ -788,9 +802,8 @@ client.on('guildCreate', async guild => {
 // ==========================================
 client.on('interactionCreate', async interaction => {
     try {
-        if (interaction.isStringSelectMenu()) {
-            return await handleSelectMenu(interaction);
-        }
+        if (interaction.isModalSubmit()) return await handleModal(interaction);
+        if (interaction.isStringSelectMenu()) return await handleSelectMenu(interaction);
         if (interaction.isButton()) return await handleButton(interaction);
         if (!interaction.isChatInputCommand()) return;
         return await handleCommand(interaction);
@@ -801,6 +814,27 @@ client.on('interactionCreate', async interaction => {
         else await interaction.reply(reply).catch(() => {});
     }
 });
+
+async function handleModal(i) {
+    if (i.customId === 'ticket_modal') {
+        const subject = i.fields.getTextInputValue('ticket_subject');
+        const description = i.fields.getTextInputValue('ticket_description');
+        
+        const ticketChannel = await findChannel(i.guild, SETTINGS.TICKET_CHANNEL);
+        if (!ticketChannel) return i.reply({ content: `❌ Sunucuda \`${SETTINGS.TICKET_CHANNEL}\` kanalı bulunamadı. Lütfen yetkililere bildirin.`, flags: MessageFlags.Ephemeral });
+
+        const embedMsg = new EmbedBuilder()
+            .setColor(0xFFA500)
+            .setTitle('🎫 Yeni Ticket / Şikayet')
+            .setDescription(`**Kullanıcı:** <@${i.user.id}> (\`${i.user.tag}\`)\n\n**Konu:** ${subject}\n\n**Açıklama:**\n${description}`)
+            .setFooter({ text: `Kullanıcı ID: ${i.user.id}` })
+            .setTimestamp();
+
+        await ticketChannel.send({ embeds: [embedMsg] });
+
+        return i.reply({ content: '✅ Ticketiniz başarıyla oluşturuldu ve yetkililere iletildi. Lütfen bekleyin, size özelden dönüş yapılabilir.', flags: MessageFlags.Ephemeral });
+    }
+}
 
 function rulesButton() {
     return new ActionRowBuilder().addComponents(
@@ -980,6 +1014,36 @@ async function handleCommand(i) {
             });
         }
 
+        case 'ticket': {
+            const modal = new ModalBuilder()
+                .setCustomId('ticket_modal')
+                .setTitle('Şikayet / Ticket Oluştur');
+
+            const subjectInput = new TextInputBuilder()
+                .setCustomId('ticket_subject')
+                .setLabel('Konu')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('Kısa bir başlık girin (örn: Kural İhlali)')
+                .setRequired(true)
+                .setMaxLength(100);
+
+            const descInput = new TextInputBuilder()
+                .setCustomId('ticket_description')
+                .setLabel('Şikayetiniz / Talebiniz')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('Lütfen durumu detaylıca açıklayın...')
+                .setRequired(true)
+                .setMaxLength(1500);
+
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(subjectInput),
+                new ActionRowBuilder().addComponents(descInput)
+            );
+
+            await i.showModal(modal);
+            return;
+        }
+
         case 'video_channels': {
             let settings = await VideoSettings.findOne({ guildId: i.guild.id });
             if (!settings) {
@@ -1131,13 +1195,14 @@ async function handleCommand(i) {
                 .setTitle('📖 Commands')
                 .addFields(
                     { name: '⏱️ Study', value: '`/pomodoro` `/goal` `/stats` `/leaderboard`' },
-                    { name: '📝 Tasks', value: '`/task add` `/task list` `/task complete` `/task delete`' }
+                    { name: '📝 Tasks', value: '`/task add` `/task list` `/task complete` `/task delete`' },
+                    { name: '🎫 Destek', value: '`/ticket`' }
                 )
                 .setFooter({ text: 'You earn time by studying in voice channels.' });
 
             if (i.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
                 helpEmbed.addFields(
-                    { name: '🛡️ Moderasyon', value: '`/warn` `/warnings` `/rulespanel` `/totalallist` `/video_channels`' }
+                    { name: '🛡️ Moderasyon', value: '`/warn` `/clearwarns` `/warnings` `/rulespanel` `/totalallist` `/video_channels`' }
                 );
             }
 
@@ -1155,6 +1220,12 @@ async function handleCommand(i) {
                 content: `✅ <@${target.id}> has been warned. Total warnings: **${count}**`,
                 flags: MessageFlags.Ephemeral,
             });
+        }
+
+        case 'clearwarns': {
+            const target = i.options.getUser('user');
+            await Warning.deleteMany({ guildId: i.guild.id, userId: target.id });
+            return i.reply({ content: `✅ <@${target.id}> adlı kullanıcının tüm uyarıları başarıyla silindi.`, flags: MessageFlags.Ephemeral });
         }
 
         case 'warnings': {
