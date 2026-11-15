@@ -57,8 +57,6 @@ const SETTINGS = {
     GENERAL_CHANNEL: 'general-chat',
     CAM_ONLY_CHANNEL: 'cam-only',
     TICKET_CHANNEL: 'mod-ticket',
-    AUTOBUMP_CHANNEL: 'autobump', 
-    BUMP_BOT_ID: '302050872383242240', // DISBOARD Bot ID
     STAFF_ROLE_NAME: '@STAFF',
     MEMBER_ROLE: 'Member',
     CAMERA_CHECK_MS: 10000,
@@ -286,13 +284,6 @@ const videoSettingsSchema = new mongoose.Schema({
     exampleChannelId: { type: String, default: null }
 });
 const VideoSettings = mongoose.model('VideoSettings', videoSettingsSchema);
-
-// Autobump Ayarları Şeması
-const autoBumpSettingsSchema = new mongoose.Schema({
-    guildId: { type: String, required: true, unique: true },
-    isActive: { type: Boolean, default: false }
-});
-const AutoBumpSettings = mongoose.model('AutoBumpSettings', autoBumpSettingsSchema);
 
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('✅ MongoDB connected.'))
@@ -665,14 +656,6 @@ const commandsData = [
         .setDescription('Create a ticket for moderators.'),
 
     new SlashCommandBuilder()
-        .setName('startbump')
-        .setDescription('Starts the 2-hour /bump loop in the autobump channel.'),
-
-    new SlashCommandBuilder()
-        .setName('stopbump')
-        .setDescription('Stops the 2-hour /bump loop.'),
-
-    new SlashCommandBuilder()
         .setName('task')
         .setDescription('Manage your to-do list.')
         .addSubcommand(s => s.setName('add').setDescription('Add a new task.')
@@ -991,31 +974,6 @@ async function handleCommand(i) {
     const { commandName: c, user } = i;
 
     switch (c) {
-        case 'startbump': {
-            await AutoBumpSettings.findOneAndUpdate(
-                { guildId: i.guild.id },
-                { isActive: true },
-                { upsert: true }
-            );
-
-            // ANINDA İLK MESAJI AT (Etiketleyerek)
-            const channel = await findChannel(i.guild, SETTINGS.AUTOBUMP_CHANNEL);
-            if (channel) {
-                await channel.send(`<@${SETTINGS.BUMP_BOT_ID}> bump`);
-            }
-
-            return i.reply({ content: '✅ Autobump system has been **STARTED**. I have sent the first bump command now and will continue every 2 hours.', flags: MessageFlags.Ephemeral });
-        }
-
-        case 'stopbump': {
-            await AutoBumpSettings.findOneAndUpdate(
-                { guildId: i.guild.id },
-                { isActive: false },
-                { upsert: true }
-            );
-            return i.reply({ content: '🛑 Autobump system has been **STOPPED**.', flags: MessageFlags.Ephemeral });
-        }
-
         case 'pomodoro': {
             const minutes = i.options.getInteger('minutes');
             await Pomodoro.create({
@@ -1250,7 +1208,7 @@ async function handleCommand(i) {
 
             if (i.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
                 helpEmbed.addFields(
-                    { name: '🛡️ Moderation', value: '`/warn` `/clearwarns` `/warnings` `/rulespanel` `/totalallist` `/video_channels` `/startbump` `/stopbump`' }
+                    { name: '🛡️ Moderation', value: '`/warn` `/clearwarns` `/warnings` `/rulespanel` `/totalallist` `/video_channels`' }
                 );
             }
 
@@ -1619,24 +1577,6 @@ cron.schedule('0 22 * * 0', async () => {
                 `<@${champion.userId}> is this week's top studier!\n` +
                 `⏱️ **${formatTime(champion.weeklySec)}** studied and **+${SETTINGS.WEEKLY_CHAMPION_BONUS} coins** earned.`, 0xF1C40F)],
         });
-    }
-}, schedule);
-
-// Her 2 saatte bir çalışır ve veritabanında isActive=true olan sunuculara bump mesajı atar
-cron.schedule('0 */2 * * *', async () => {
-    for (const guild of client.guilds.cache.values()) {
-        try {
-            const bumpSetting = await AutoBumpSettings.findOne({ guildId: guild.id });
-            if (bumpSetting && bumpSetting.isActive) {
-                const channel = await findChannel(guild, SETTINGS.AUTOBUMP_CHANNEL);
-                if (channel) {
-                    await channel.send(`<@${SETTINGS.BUMP_BOT_ID}> bump`);
-                    console.log(`[AUTOBUMP] Sent bump command to ${guild.name} (${channel.name}).`);
-                }
-            }
-        } catch (err) {
-            console.error(`[AUTOBUMP] Failed for ${guild.name}:`, err.message);
-        }
     }
 }, schedule);
 
