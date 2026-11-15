@@ -996,7 +996,14 @@ async function handleCommand(i) {
                 { isActive: true },
                 { upsert: true }
             );
-            return i.reply({ content: '✅ Autobump system has been **STARTED**. I will type `/bump` in the autobump channel every 2 hours.', flags: MessageFlags.Ephemeral });
+
+            // ANINDA İLK MESAJI AT
+            const channel = await findChannel(i.guild, SETTINGS.AUTOBUMP_CHANNEL);
+            if (channel) {
+                await channel.send('/bump');
+            }
+
+            return i.reply({ content: '✅ Autobump system has been **STARTED**. I have sent the first `/bump` now and will continue every 2 hours.', flags: MessageFlags.Ephemeral });
         }
 
         case 'stopbump': {
