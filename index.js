@@ -58,6 +58,7 @@ const SETTINGS = {
     CAM_ONLY_CHANNEL: 'cam-only',
     TICKET_CHANNEL: 'mod-ticket',
     AUTOBUMP_CHANNEL: 'autobump', 
+    BUMP_BOT_ID: '302050872383242240', // DISBOARD Bot ID
     STAFF_ROLE_NAME: '@STAFF',
     MEMBER_ROLE: 'Member',
     CAMERA_CHECK_MS: 10000,
@@ -997,13 +998,13 @@ async function handleCommand(i) {
                 { upsert: true }
             );
 
-            // ANINDA İLK MESAJI AT
+            // ANINDA İLK MESAJI AT (Etiketleyerek)
             const channel = await findChannel(i.guild, SETTINGS.AUTOBUMP_CHANNEL);
             if (channel) {
-                await channel.send('/bump');
+                await channel.send(`<@${SETTINGS.BUMP_BOT_ID}> bump`);
             }
 
-            return i.reply({ content: '✅ Autobump system has been **STARTED**. I have sent the first `/bump` now and will continue every 2 hours.', flags: MessageFlags.Ephemeral });
+            return i.reply({ content: '✅ Autobump system has been **STARTED**. I have sent the first bump command now and will continue every 2 hours.', flags: MessageFlags.Ephemeral });
         }
 
         case 'stopbump': {
@@ -1621,7 +1622,7 @@ cron.schedule('0 22 * * 0', async () => {
     }
 }, schedule);
 
-// Her 2 saatte bir çalışır ve veritabanında isActive=true olan sunuculara /bump atar
+// Her 2 saatte bir çalışır ve veritabanında isActive=true olan sunuculara bump mesajı atar
 cron.schedule('0 */2 * * *', async () => {
     for (const guild of client.guilds.cache.values()) {
         try {
@@ -1629,8 +1630,8 @@ cron.schedule('0 */2 * * *', async () => {
             if (bumpSetting && bumpSetting.isActive) {
                 const channel = await findChannel(guild, SETTINGS.AUTOBUMP_CHANNEL);
                 if (channel) {
-                    await channel.send('/bump');
-                    console.log(`[AUTOBUMP] Sent /bump to ${guild.name} (${channel.name}).`);
+                    await channel.send(`<@${SETTINGS.BUMP_BOT_ID}> bump`);
+                    console.log(`[AUTOBUMP] Sent bump command to ${guild.name} (${channel.name}).`);
                 }
             }
         } catch (err) {
