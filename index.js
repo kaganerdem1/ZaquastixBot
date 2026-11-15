@@ -57,6 +57,7 @@ const SETTINGS = {
     GENERAL_CHANNEL: 'general-chat',
     CAM_ONLY_CHANNEL: 'cam-only',
     TICKET_CHANNEL: 'mod-ticket',
+    AUTOBUMP_CHANNEL: 'autobump', // YENİ EKLENDİ
     STAFF_ROLE_NAME: '@STAFF',
     MEMBER_ROLE: 'Member',
     CAMERA_CHECK_MS: 10000,
@@ -284,19 +285,6 @@ const videoSettingsSchema = new mongoose.Schema({
     exampleChannelId: { type: String, default: null }
 });
 const VideoSettings = mongoose.model('VideoSettings', videoSettingsSchema);
-
-// Ticket state (kapatılınca durum tutmak için)
-const ticketSchema = new mongoose.Schema({
-    guildId: { type: String, required: true },
-    userId: { type: String, required: true },
-    subject: { type: String, default: 'No subject' },
-    closed: { type: Boolean, default: false },
-    closedBy: { type: String, default: null },
-    closeReason: { type: String, default: null },
-    createdAt: { type: Date, default: Date.now },
-    closedAt: { type: Date, default: null },
-});
-const Ticket = mongoose.model('Ticket', ticketSchema);
 
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('✅ MongoDB connected.'))
@@ -842,87 +830,16 @@ async function handleModal(i) {
         const staffRole = i.guild.roles.cache.find(r => r.name === SETTINGS.STAFF_ROLE_NAME || r.name === SETTINGS.STAFF_ROLE_NAME.replace('@', ''));
         const staffMention = staffRole ? `<@&${staffRole.id}>` : SETTINGS.STAFF_ROLE_NAME;
 
-        // Ticket kaydını oluştur
-        const ticketDoc = await Ticket.create({
-            guildId: i.guild.id,
-            userId: i.user.id,
-            subject: subject,
-        });
-
         const embedMsg = new EmbedBuilder()
             .setColor(0xFFA500)
             .setTitle('🎫 New Ticket / Report')
             .setDescription(`**User:** <@${i.user.id}> (\`${i.user.tag}\`)\n\n**Subject:** ${subject}\n\n**Description:**\n${description}`)
-            .setFooter({ text: `User ID: ${i.user.id} | Ticket ID: ${ticketDoc._id}` })
+            .setFooter({ text: `User ID: ${i.user.id}` })
             .setTimestamp();
 
-        // Ticket butonu (Kapat)
-        const ticketRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId(`close_ticket_${ticketDoc._id}`)
-                .setLabel('🔒 Close Ticket')
-                .setStyle(ButtonStyle.Danger)
-        );
-
-        await ticketChannel.send({ content: `${staffMention}`, embeds: [embedMsg], components: [ticketRow] });
+        await ticketChannel.send({ content: `${staffMention}`, embeds: [embedMsg] });
 
         return i.reply({ content: '✅ Your ticket has been created and sent to the staff. Please wait for a response via DM.', flags: MessageFlags.Ephemeral });
-    }
-
-    if (i.customId === 'ticket_close_modal') {
-        const ticketId = i.fields.getTextInputValue('ticket_close_id');
-        const reason = i.fields.getTextInputValue('ticket_close_reason');
-
-        if (!mongoose.isValidObjectId(ticketId)) {
-            return i.reply({ content: '❌ Invalid ticket ID.', flags: MessageFlags.Ephemeral });
-        }
-
-        const ticket = await Ticket.findById(ticketId);
-        if (!ticket) {
-            return i.reply({ content: '❌ Ticket not found.', flags: MessageFlags.Ephemeral });
-        }
-        if (ticket.closed) {
-            return i.reply({ content: '❌ This ticket is already closed.', flags: MessageFlags.Ephemeral });
-        }
-
-        ticket.closed = true;
-        ticket.closedBy = i.user.id;
-        ticket.closeReason = reason;
-        ticket.closedAt = new Date();
-        await ticket.save();
-
-        // mod-ticket kanalına kapanış mesajı
-        const ticketChannel = await findChannel(i.guild, SETTINGS.TICKET_CHANNEL);
-        if (ticketChannel) {
-            const closeEmbed = new EmbedBuilder()
-                .setColor(0x2ECC71)
-                .setTitle('🔒 Ticket Closed')
-                .setDescription(
-                    `**Closed by:** <@${i.user.id}> (\`${i.user.tag}\`)\n` +
-                    `**Ticket Owner:** <@${ticket.userId}>\n` +
-                    `**Subject:** ${ticket.subject}\n\n` +
-                    `**Closing Note:**\n${reason}`
-                )
-                .setFooter({ text: `User ID: ${ticket.userId} | Ticket ID: ${ticket._id}` })
-                .setTimestamp();
-            await ticketChannel.send({ embeds: [closeEmbed] }).catch(() => {});
-        }
-
-        // Kullanıcıya DM
-        await sendDM(i.guild, ticket.userId, {
-            embeds: [
-                new EmbedBuilder()
-                    .setColor(0x2ECC71)
-                    .setTitle('🔒 Your Ticket Has Been Closed')
-                    .setDescription(
-                        `Your ticket (**${ticket.subject}**) has been closed by **${i.user.username}**.\n\n` +
-                        `**Note from staff:**\n${reason}`
-                    )
-                    .setTimestamp()
-            ]
-        });
-
-        return i.reply({ content: '✅ Ticket closed. The user has been notified via DM.', flags: MessageFlags.Ephemeral });
     }
 }
 
@@ -942,48 +859,6 @@ async function handleButton(i) {
             await i.member.roles.add(role, 'Accepted the rules');
         }
         return i.reply({ content: '✅ You accepted the rules. Welcome to the server!', flags: MessageFlags.Ephemeral });
-    }
-
-    // Ticket kapatma butonu
-    if (i.customId.startsWith('close_ticket_')) {
-        const ticketId = i.customId.replace('close_ticket_', '');
-        if (!mongoose.isValidObjectId(ticketId)) {
-            return i.reply({ content: '❌ Invalid ticket ID.', flags: MessageFlags.Ephemeral });
-        }
-
-        const ticket = await Ticket.findById(ticketId);
-        if (!ticket) {
-            return i.reply({ content: '❌ Ticket not found.', flags: MessageFlags.Ephemeral });
-        }
-        if (ticket.closed) {
-            return i.reply({ content: '❌ This ticket is already closed.', flags: MessageFlags.Ephemeral });
-        }
-
-        const modal = new ModalBuilder()
-            .setCustomId('ticket_close_modal')
-            .setTitle('Close Ticket');
-
-        const idInput = new TextInputBuilder()
-            .setCustomId('ticket_close_id')
-            .setLabel('Ticket ID (do not change)')
-            .setStyle(TextInputStyle.Short)
-            .setValue(ticketId)
-            .setRequired(true);
-
-        const reasonInput = new TextInputBuilder()
-            .setCustomId('ticket_close_reason')
-            .setLabel('Closing Note / Explanation')
-            .setStyle(TextInputStyle.Paragraph)
-            .setPlaceholder('Explain what was done to resolve this ticket...')
-            .setRequired(true)
-            .setMaxLength(1000);
-
-        modal.addComponents(
-            new ActionRowBuilder().addComponents(idInput),
-            new ActionRowBuilder().addComponents(reasonInput)
-        );
-
-        return i.showModal(modal);
     }
 
     if (i.customId.startsWith('pomo_')) {
@@ -1535,22 +1410,11 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         if (oldChannel) cancelCameraCheck(userId);
 
         if (newChannel) {
-            // Her sunucu için ayrı kamera ayarlarını çekiyoruz
-            const vSettings = await VideoSettings.findOne({ guildId: newState.guild.id });
             const name = await voiceChannelName(newState);
-            
-            // Kontrol: Veritabanında seçili bir kanal varsa ve girilen kanal o ise
-            // (Eğer veritabanında kanal seçilmemişse, eski usul isim kontrolüne devam eder)
-            const isCamOnly = vSettings?.exampleChannelId 
-                ? vSettings.exampleChannelId === newChannel 
-                : (name && normalize(name) === normalize(SETTINGS.CAM_ONLY_CHANNEL));
-
-            if (isCamOnly) {
-                // O sunucunun kendi belirlediği süreyi alıyoruz (yoksa 15 saniye)
-                const graceMs = vSettings?.gracePeriod || 15000;
+            if (name && normalize(name) === normalize(SETTINGS.CAM_ONLY_CHANNEL)) {
                 const timer = setTimeout(
                     () => cameraCheck(newState.guild, userId, newChannel),
-                    graceMs
+                    SETTINGS.CAMERA_CHECK_MS
                 );
                 pendingCameraChecks.set(userId, timer);
             }
@@ -1714,6 +1578,21 @@ cron.schedule('0 22 * * 0', async () => {
                 `<@${champion.userId}> is this week's top studier!\n` +
                 `⏱️ **${formatTime(champion.weeklySec)}** studied and **+${SETTINGS.WEEKLY_CHAMPION_BONUS} coins** earned.`, 0xF1C40F)],
         });
+    }
+}, schedule);
+
+// YENİ EKLENDİ: Her 2 saatte bir /bump komutu
+cron.schedule('0 */2 * * *', async () => {
+    for (const guild of client.guilds.cache.values()) {
+        const channel = await findChannel(guild, SETTINGS.AUTOBUMP_CHANNEL);
+        if (channel) {
+            try {
+                await channel.send('/bump');
+                console.log(`[AUTOBUMP] Sent /bump to ${guild.name} (${channel.name}).`);
+            } catch (err) {
+                console.error(`[AUTOBUMP] Failed to send in ${guild.name}:`, err.message);
+            }
+        }
     }
 }, schedule);
 
