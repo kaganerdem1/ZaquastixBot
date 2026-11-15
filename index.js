@@ -286,7 +286,7 @@ const videoSettingsSchema = new mongoose.Schema({
 });
 const VideoSettings = mongoose.model('VideoSettings', videoSettingsSchema);
 
-// YENİ: Autobump Ayarları Şeması
+// Autobump Ayarları Şeması
 const autoBumpSettingsSchema = new mongoose.Schema({
     guildId: { type: String, required: true, unique: true },
     isActive: { type: Boolean, default: false }
@@ -664,11 +664,11 @@ const commandsData = [
         .setDescription('Create a ticket for moderators.'),
 
     new SlashCommandBuilder()
-        .setName('start')
+        .setName('startbump')
         .setDescription('Starts the 2-hour /bump loop in the autobump channel.'),
 
     new SlashCommandBuilder()
-        .setName('stop')
+        .setName('stopbump')
         .setDescription('Stops the 2-hour /bump loop.'),
 
     new SlashCommandBuilder()
@@ -990,7 +990,7 @@ async function handleCommand(i) {
     const { commandName: c, user } = i;
 
     switch (c) {
-        case 'start': {
+        case 'startbump': {
             await AutoBumpSettings.findOneAndUpdate(
                 { guildId: i.guild.id },
                 { isActive: true },
@@ -999,7 +999,7 @@ async function handleCommand(i) {
             return i.reply({ content: '✅ Autobump system has been **STARTED**. I will type `/bump` in the autobump channel every 2 hours.', flags: MessageFlags.Ephemeral });
         }
 
-        case 'stop': {
+        case 'stopbump': {
             await AutoBumpSettings.findOneAndUpdate(
                 { guildId: i.guild.id },
                 { isActive: false },
@@ -1242,7 +1242,7 @@ async function handleCommand(i) {
 
             if (i.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
                 helpEmbed.addFields(
-                    { name: '🛡️ Moderation', value: '`/warn` `/clearwarns` `/warnings` `/rulespanel` `/totalallist` `/video_channels`' }
+                    { name: '🛡️ Moderation', value: '`/warn` `/clearwarns` `/warnings` `/rulespanel` `/totalallist` `/video_channels` `/startbump` `/stopbump`' }
                 );
             }
 
