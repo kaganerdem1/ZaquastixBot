@@ -399,7 +399,29 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
+function isStaff(member) {
+    if (!member) return false;
+    if (member.permissions.has(PermissionFlagsBits.ManageMessages)) return true;
+    return member.roles.cache.some(r =>
+        r.name === SETTINGS.STAFF_ROLE_NAME || r.name === SETTINGS.STAFF_ROLE_NAME.replace('@', ''));
+}
+
 async function handleModal(i) {
+    if (i.customId.startsWith('ticket_reply_modal:')) {
+        if (!isStaff(i.member)) return i.reply({ content: '❌ Only staff can reply to tickets.', flags: MessageFlags.Ephemeral });
+        const userId = i.customId.split(':')[1];
+        const text = i.fields.getTextInputValue('reply_text');
+
+        const ok = await sendDM(i.guild, userId, {
+            embeds: [embed('💬 Reply from Staff', text, 0x3498DB)],
+        });
+
+        return i.reply({
+            content: ok ? '✅ Your reply was sent to the user via DM.' : '❌ Could not DM the user. Their DMs may be closed.',
+            flags: MessageFlags.Ephemeral,
+        });
+    }
+
     if (i.customId === 'ticket_modal') {
         const subject = i.fields.getTextInputValue('ticket_subject');
         const description = i.fields.getTextInputValue('ticket_description');
@@ -417,7 +439,12 @@ async function handleModal(i) {
             .setFooter({ text: `User ID: ${i.user.id}` })
             .setTimestamp();
 
-        await ticketChannel.send({ content: `${staffMention}`, embeds: [embedMsg] });
+        const ticketRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`ticket_reply:${i.user.id}`).setLabel('Reply').setEmoji('💬').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('ticket_close').setLabel('Close Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger),
+        );
+
+        await ticketChannel.send({ content: `${staffMention}`, embeds: [embedMsg], components: [ticketRow] });
 
         return i.reply({ content: '✅ Your ticket has been created and sent to the staff. Please wait for a response via DM.', flags: MessageFlags.Ephemeral });
     }
@@ -433,6 +460,45 @@ function rulesButton() {
 }
 
 async function handleButton(i) {
+    if (i.customId.startsWith('ticket_reply:')) {
+        if (!isStaff(i.member)) return i.reply({ content: '❌ Only staff can reply to tickets.', flags: MessageFlags.Ephemeral });
+        const userId = i.customId.split(':')[1];
+
+        const modal = new ModalBuilder()
+            .setCustomId(`ticket_reply_modal:${userId}`)
+            .setTitle('Reply to Ticket');
+        modal.addComponents(
+            new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                    .setCustomId('reply_text')
+                    .setLabel('Your reply (sent to the user via DM)')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setRequired(true)
+                    .setMaxLength(1000),
+            ),
+        );
+        return i.showModal(modal);
+    }
+
+    if (i.customId === 'ticket_close') {
+        if (!isStaff(i.member)) return i.reply({ content: '❌ Only staff can close tickets.', flags: MessageFlags.Ephemeral });
+
+        const footer = i.message.embeds[0]?.footer?.text ?? '';
+        const userId = footer.replace('User ID:', '').trim();
+
+        const closedRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('ticket_closed').setLabel('Ticket Closed').setStyle(ButtonStyle.Secondary).setDisabled(true),
+        );
+        await i.update({ embeds: i.message.embeds, components: [closedRow] });
+
+        if (userId) {
+            await sendDM(i.guild, userId, {
+                embeds: [embed('🔒 Ticket Closed', 'Your ticket has been closed by the staff.', 0x95A5A6)],
+            });
+        }
+        return;
+    }
+
     if (i.customId === 'accept_rules') {
         const role = await ensureRole(i.guild, SETTINGS.MEMBER_ROLE, 0x57F287);
         if (!i.member.roles.cache.has(role.id)) {
