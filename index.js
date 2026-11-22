@@ -75,13 +75,6 @@ const SETTINGS = {
 
 const BAD_WORDS = ['badword1', 'badword2'];
 
-const MOTIVATION = [
-    '🌱 Small steps are the beginning of great journeys. Try a pomodoro today!',
-    '🔥 Discipline is the bridge between what you want and what you do.',
-    '📚 One page, one topic, one question. The more you move forward today, the more you gain.',
-    '🦁 Join a room, turn on your camera, and focus!',
-    '⏳ Put your phone away. 25 minutes is enough.',
-];
 
 // ==========================================
 // 5) DATABASE MODELS
@@ -274,252 +267,14 @@ async function addStudyTime(userId, name, seconds, coins) {
 }
 
 // ==========================================
-// 9) LEADERBOARD IMAGE
-// ==========================================
-function cleanName(s) {
-    if (!s) return '';
-    return String(s)
-        .normalize('NFKD')
-        .replace(/\p{M}/gu, '')
-        .replace(/[^\p{L}\p{N} ._\-|'()\[\]]/gu, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-
-function displayNameOf(member, stored) {
-    return cleanName(member?.displayName)
-        || cleanName(member?.user?.username)
-        || cleanName(stored?.username)
-        || `User ${String(stored?.userId ?? '').slice(-4)}`;
-}
-
-function rankingQuery(type) {
-    if (type === 'weekly') {
-        return { field: 'weeklySec', filter: { weekKey: weekKey(), weeklySec: { $gt: 0 } } };
-    }
-    if (type === 'alltime') {
-        return { field: 'totalSec', filter: { totalSec: { $gt: 0 } } };
-    }
-    return { field: 'dailySec', filter: { lastStudyDate: dayKey(), dailySec: { $gt: 0 } } };
-}
-
-const LABELS = {
-    daily: 'DAILY',
-    weekly: 'WEEKLY',
-    alltime: 'ALL-TIME',
-};
-
-async function loadAvatar(url) {
-    try {
-        const res = await fetch(url);
-        const buf = Buffer.from(await res.arrayBuffer());
-        return await loadImage(buf);
-    } catch {
-        return null;
-    }
-}
-
-function drawAvatar(ctx, img, x, y, r, letter) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.closePath();
-    ctx.clip();
-    if (img) {
-        ctx.drawImage(img, x - r, y - r, r * 2, r * 2);
-    } else {
-        ctx.fillStyle = '#3A4B5C';
-        ctx.fillRect(x - r, y - r, r * 2, r * 2);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = `bold ${Math.round(r)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText((letter || '?').charAt(0).toUpperCase(), x, y + 2);
-    }
-    ctx.restore();
-}
-
-function roundRect(ctx, x, y, w, h, r, color) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill();
-}
-
-function drawCrown(ctx, x, yCenter, r, color) {
-    const g = r * 1.2;
-    const base = yCenter - r + 4;
-    const top = yCenter - r - 30;
-    ctx.beginPath();
-    ctx.moveTo(x - g / 2, base);
-    ctx.lineTo(x - g / 2, top + 12);
-    ctx.lineTo(x - g / 4, top + 24);
-    ctx.lineTo(x, top);
-    ctx.lineTo(x + g / 4, top + 24);
-    ctx.lineTo(x + g / 2, top + 12);
-    ctx.lineTo(x + g / 2, base);
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill();
-}
-
-async function buildLeaderboardImage(type, guild) {
-    const q = rankingQuery(type);
-    const rows = await User.find(q.filter).sort({ [q.field]: -1 }).limit(SETTINGS.LEADERBOARD_LIMIT);
-    if (!rows.length) return null;
-
-    const entries = await Promise.all(rows.map(async row => {
-        const member = await guild.members.fetch(row.userId).catch(() => null);
-        const img = member
-            ? await loadAvatar(member.user.displayAvatarURL({ extension: 'png', size: 128 }))
-            : null;
-        return {
-            name: displayNameOf(member, row),
-            img,
-            seconds: row[q.field],
-        };
-    }));
-
-    const W = 800;
-    const listStart = 360;
-    const rowGap = 60;
-    const listCount = Math.max(0, entries.length - 3);
-    const H = listStart + listCount * rowGap + 20;
-
-    const canvas = createCanvas(W, H);
-    const ctx = canvas.getContext('2d');
-
-    ctx.fillStyle = '#10202C';
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = '#F1C40F';
-    ctx.font = 'bold 46px sans-serif';
-    ctx.fillText('PRODUCTIVITY LEADERBOARD', W / 2, 62);
-
-    ctx.fillStyle = '#DDDDDD';
-    ctx.font = '18px sans-serif';
-    ctx.fillText(`SERVER : ${cleanName(guild.name) || 'Server'} · ${LABELS[type] ?? ''}`, W / 2, 94);
-
-    const podium = [
-        { idx: 1, x: W * 0.22, y: 215, r: 58, color: '#C0C0C0', label: '2ND' },
-        { idx: 0, x: W / 2,    y: 200, r: 74, color: '#F1C40F', label: '1ST' },
-        { idx: 2, x: W * 0.78, y: 215, r: 58, color: '#CD7F32', label: '3RD' },
-    ];
-
-    for (const p of podium) {
-        const e = entries[p.idx];
-        if (!e) continue;
-
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r + 5, 0, Math.PI * 2);
-        ctx.fillStyle = p.color;
-        ctx.fill();
-
-        drawAvatar(ctx, e.img, p.x, p.y, p.r, e.name);
-        drawCrown(ctx, p.x, p.y, p.r + 5, p.color);
-
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'alphabetic';
-
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 15px sans-serif';
-        ctx.fillText(p.label, p.x, p.y + p.r + 32);
-
-        ctx.fillStyle = '#F1C40F';
-        ctx.font = 'bold 18px sans-serif';
-        ctx.fillText(e.name, p.x, p.y + p.r + 56);
-
-        ctx.fillStyle = '#DDDDDD';
-        ctx.font = '16px sans-serif';
-        ctx.fillText(`${Math.floor(e.seconds / 3600)} hours`, p.x, p.y + p.r + 78);
-    }
-
-    for (let i = 3; i < entries.length; i++) {
-        const e = entries[i];
-        const y = listStart + (i - 3) * rowGap;
-
-        roundRect(ctx, 20, y, W - 40, 50, 12, '#1A2E3D');
-
-        const mid = y + 25;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '20px sans-serif';
-        ctx.fillText(String(i + 1), 60, mid);
-
-        drawAvatar(ctx, e.img, 110, mid, 20, e.name);
-
-        ctx.textAlign = 'left';
-        ctx.fillText(e.name, 150, mid);
-
-        ctx.textAlign = 'right';
-        ctx.font = 'bold 20px sans-serif';
-        ctx.fillText(formatTime(e.seconds), W - 45, mid);
-    }
-
-    return canvas.toBuffer('image/png');
-}
-
-// ==========================================
 // 10) SLASH COMMANDS AND SERVER SETUP
 // ==========================================
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
 const commandsData = [
     new SlashCommandBuilder()
-        .setName('pomodoro')
-        .setDescription('Start a pomodoro timer.')
-        .addIntegerOption(o => o.setName('minutes').setDescription('Length in minutes (1-180)')
-            .setRequired(true).setMinValue(1).setMaxValue(180)),
-
-    new SlashCommandBuilder()
         .setName('ticket')
         .setDescription('Create a ticket for moderators.'),
-
-    new SlashCommandBuilder()
-        .setName('task')
-        .setDescription('Manage your to-do list.')
-        .addSubcommand(s => s.setName('add').setDescription('Add a new task.')
-            .addStringOption(o => o.setName('text').setDescription('Task').setRequired(true)))
-        .addSubcommand(s => s.setName('list').setDescription('List your tasks.'))
-        .addSubcommand(s => s.setName('complete').setDescription('Mark a task as complete.')
-            .addStringOption(o => o.setName('id').setDescription('Task ID').setRequired(true)))
-        .addSubcommand(s => s.setName('delete').setDescription('Delete a task.')
-            .addStringOption(o => o.setName('id').setDescription('Task ID').setRequired(true))),
-
-    new SlashCommandBuilder().setName('stats').setDescription('Show your study statistics.'),
-
-    new SlashCommandBuilder()
-        .setName('leaderboard')
-        .setDescription('Show the study leaderboard.')
-        .addStringOption(o => o.setName('type').setDescription('Which leaderboard?')
-            .addChoices(
-                { name: 'All-time', value: 'alltime' },
-                { name: 'Daily', value: 'daily' },
-                { name: 'Weekly', value: 'weekly' },
-            )),
-
-    new SlashCommandBuilder()
-        .setName('totalallist')
-        .setDescription('Sends all study hours via DM (Admins only).')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-    new SlashCommandBuilder()
-        .setName('goal')
-        .setDescription('Set a daily study goal (0 = remove).')
-        .addIntegerOption(o => o.setName('minutes').setDescription('Daily goal in minutes')
-            .setRequired(true).setMinValue(0).setMaxValue(720)),
 
     new SlashCommandBuilder()
         .setName('video_channels')
@@ -800,52 +555,6 @@ async function handleCommand(i) {
     const { commandName: c, user } = i;
 
     switch (c) {
-        case 'pomodoro': {
-            const minutes = i.options.getInteger('minutes');
-            await Pomodoro.create({
-                userId: user.id,
-                username: user.username,
-                channelId: i.channelId,
-                minutes,
-                endsAt: new Date(Date.now() + minutes * 60000),
-            });
-
-            const panelEmbed = new EmbedBuilder()
-                .setColor(0x2F3136)
-                .setTitle('⏱️ Cam-only')
-                .setDescription(`> **Timer started!**\n> Focus duration: **${minutes} minutes**\n\n*You can pin this message while studying.*`)
-                .addFields(
-                    { name: '⏳ Time Left', value: `<t:${Math.floor((Date.now() + minutes * 60000) / 1000)}:R>`, inline: true },
-                    { name: '👤 Started by', value: `<@${user.id}>`, inline: true },
-                    { name: '⏰ Start Time', value: `<t:${Math.floor(Date.now() / 1000)}:T>`, inline: true }
-                )
-                .setFooter({ text: 'Only the creator or mods can control this panel.' });
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`pomo_present_${user.id}`)
-                    .setLabel('Present')
-                    .setEmoji('✅')
-                    .setStyle(ButtonStyle.Success),
-                new ButtonBuilder()
-                    .setCustomId(`pomo_options_${user.id}`)
-                    .setLabel('Options')
-                    .setEmoji('⚙️')
-                    .setStyle(ButtonStyle.Primary),
-                new ButtonBuilder()
-                    .setCustomId(`pomo_stop_${user.id}`)
-                    .setLabel('Stop')
-                    .setEmoji('🛑')
-                    .setStyle(ButtonStyle.Danger)
-            );
-
-            return i.reply({
-                content: `📢 <@${user.id}> started a Pomodoro!`,
-                embeds: [panelEmbed],
-                components: [row],
-            });
-        }
-
         case 'ticket': {
             const modal = new ModalBuilder()
                 .setCustomId('ticket_modal')
@@ -910,131 +619,18 @@ async function handleCommand(i) {
             return i.reply({ embeds: [panelEmbed], components: [row] });
         }
 
-        case 'task': {
-            await i.deferReply({ flags: MessageFlags.Ephemeral });
-            const sub = i.options.getSubcommand();
-
-            if (sub === 'add') {
-                const text = i.options.getString('text');
-                const task = await Task.create({ userId: user.id, description: text });
-                return i.editReply(`✅ Task added: **${text}** (ID: \`${task._id}\`)`);
-            }
-            if (sub === 'list') {
-                const tasks = await Task.find({ userId: user.id });
-                if (!tasks.length) return i.editReply('📭 You have no tasks.');
-                const text = tasks
-                    .map(t => `${t.completed ? '✅' : '⏳'} ${t.description} (ID: \`${t._id}\`)`)
-                    .join('\n');
-                return i.editReply(text);
-            }
-
-            const id = i.options.getString('id');
-            if (!mongoose.isValidObjectId(id)) return i.editReply('❌ Invalid task ID.');
-
-            if (sub === 'complete') {
-                const t = await Task.findOneAndUpdate({ _id: id, userId: user.id }, { completed: true });
-                return i.editReply(t ? '✅ Task completed.' : '❌ No task found with that ID.');
-            }
-            if (sub === 'delete') {
-                const t = await Task.findOneAndDelete({ _id: id, userId: user.id });
-                return i.editReply(t ? '🗑️ Task deleted.' : '❌ No task found with that ID.');
-            }
-            return;
-        }
-
-        case 'stats': {
-            const u = await User.findOne({ userId: user.id });
-            if (!u) return i.reply('❌ No data yet. Start with a pomodoro or a voice study session.');
-
-            const goalLine = u.dailyGoal > 0
-                ? `🎯 Daily goal: **${formatTime(u.dailySec)} / ${u.dailyGoal}:00:00**`
-                : '🎯 Daily goal: not set (`/goal`)';
-
-            return i.reply({
-                embeds: [embed('📊 Stats',
-                    `⏱️ Total: **${formatTime(u.totalSec)}**\n` +
-                    `📅 Today: **${formatTime(u.dailySec)}**\n` +
-                    `📆 This week: **${formatTime(u.weeklySec)}**\n` +
-                    `🔥 Streak: **${u.streak} days**\n` +
-                    `${goalLine}\n` +
-                    `💰 Balance: **${u.balance}** coins`, 0x9B59B6)],
-            });
-        }
-
-        case 'leaderboard': {
-            await i.deferReply();
-            const type = i.options.getString('type') ?? 'alltime';
-            const buf = await buildLeaderboardImage(type, i.guild);
-            if (!buf) return i.editReply('📭 No data for this leaderboard yet.');
-            return i.editReply({
-                files: [new AttachmentBuilder(buf, { name: 'leaderboard.png' })],
-            });
-        }
-
-        case 'totalallist': {
-            await i.deferReply({ flags: MessageFlags.Ephemeral });
-            
-            try {
-                const allUsers = await User.find({ totalSec: { $gt: 0 } }).sort({ totalSec: -1 }).lean();
-                
-                if (!allUsers.length) {
-                    return i.editReply('📭 No study data found in the database.');
-                }
-
-                const chunks = [];
-                let currentChunk = '📋 **ALL-TIME STUDY LIST**\n\n';
-                
-                allUsers.forEach((u, index) => {
-                    const line = `**${index + 1}.** ${u.username} (\`${u.userId}\`) - **${formatTime(u.totalSec)}**\n`;
-                    if ((currentChunk + line).length > 1900) {
-                        chunks.push(currentChunk);
-                        currentChunk = '';
-                    }
-                    currentChunk += line;
-                });
-                if (currentChunk.length > 0) chunks.push(currentChunk);
-
-                for (const chunk of chunks) {
-                    await user.send(chunk);
-                }
-                
-                return i.editReply(`✅ The study list for **${allUsers.length}** users has been sent via DM.`);
-                
-            } catch (err) {
-                console.error('❌ totalallist command error:', err);
-                return i.editReply('❌ Could not send the list via DM. Please make sure your DMs are open.');
-            }
-        }
-
-        case 'goal': {
-            const minutes = i.options.getInteger('minutes');
-            await User.findOneAndUpdate(
-                { userId: user.id },
-                { $set: { dailyGoal: minutes }, $setOnInsert: { username: user.username } },
-                { upsert: true }
-            );
-            return i.reply({
-                content: minutes === 0
-                    ? '🗑️ Your daily goal has been removed.'
-                    : `🎯 Your daily goal is set to **${minutes} minutes**. Reach it to earn **+${SETTINGS.GOAL_BONUS} coins**!`,
-                flags: MessageFlags.Ephemeral,
-            });
-        }
-
         case 'help': {
             const helpEmbed = new EmbedBuilder()
                 .setColor(0x5865F2)
                 .setTitle('📖 Commands')
                 .addFields(
-                    { name: '⏱️ Study', value: '`/pomodoro` `/goal` `/stats` `/leaderboard`' },
-                    { name: '📝 Tasks', value: '`/task add` `/task list` `/task complete` `/task delete`' },
                     { name: '🎫 Support', value: '`/ticket`' }
                 )
                 .setFooter({ text: 'You earn time by studying in voice channels.' });
 
             if (i.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
                 helpEmbed.addFields(
-                    { name: '🛡️ Moderation', value: '`/warn` `/clearwarns` `/warnings` `/rulespanel` `/totalallist` `/video_channels`' }
+                    { name: '🛡️ Moderation', value: '`/warn` `/clearwarns` `/warnings` `/rulespanel` `/video_channels`' }
                 );
             }
 
@@ -1161,13 +757,11 @@ async function endSession(guild, userId, name) {
 
     const seconds = Math.floor((Date.now() - session.joinedAt.getTime()) / 1000);
     let todaySec = 0;
-    let bonus = false;
 
     if (seconds > 0) {
         const coins = Math.floor(seconds / 60) * SETTINGS.VOICE_COIN_PER_MIN;
         const result = await addStudyTime(userId, name, seconds, coins);
         todaySec = result.u.dailySec;
-        bonus = result.bonus;
     } else {
         todaySec = (await User.findOne({ userId }))?.dailySec ?? 0;
     }
@@ -1181,12 +775,6 @@ async function endSession(guild, userId, name) {
             `${summary}.\n📚 You've studied **${formatTime(todaySec)}** in total today.`, 0xE74C3C)],
     });
 
-    if (bonus) {
-        await sendDM(guild, userId, {
-            embeds: [embed('🎯 Goal Reached',
-                `You reached your daily goal! **+${SETTINGS.GOAL_BONUS} coins** earned.`, 0xF1C40F)],
-        });
-    }
 }
 
 async function voiceChannelName(state) {
@@ -1329,61 +917,6 @@ client.on('guildMemberRemove', async member => {
         console.error('❌ Goodbye message error:', err);
     }
 });
-
-// ==========================================
-// 17) POMODORO TIMER (checked every 15 seconds)
-// ==========================================
-setInterval(async () => {
-    try {
-        const finished = await Pomodoro.find({ done: false, endsAt: { $lte: new Date() } });
-        for (const p of finished) {
-            const result = await Pomodoro.updateOne({ _id: p._id, done: false }, { done: true });
-            if (result.modifiedCount === 0) continue;
-
-            const coins = p.minutes * SETTINGS.POMODORO_COIN_PER_MIN;
-            const { bonus } = await addStudyTime(p.userId, p.username, p.minutes * 60, coins);
-            await User.updateOne({ userId: p.userId }, { $inc: { pomodoroCount: 1 } });
-
-            const channel = await client.channels.fetch(p.channelId).catch(() => null);
-            if (channel) {
-                await channel.send({
-                    embeds: [embed('🔔 Pomodoro Done!',
-                        `<@${p.userId}> finished **${p.minutes} minutes** of focus. Time for a break!\n**+${coins} coins** earned.`, 0x2ECC71)],
-                });
-                if (bonus) {
-                    await channel.send({
-                        embeds: [embed('🎯 Goal Reached',
-                            `<@${p.userId}> reached their daily goal! **+${SETTINGS.GOAL_BONUS} coins** earned.`, 0xF1C40F)],
-                    });
-                }
-            }
-        }
-    } catch (err) {
-        console.error('❌ Pomodoro check error:', err);
-    }
-}, 15000);
-
-// ==========================================
-// 18) SCHEDULED JOBS (Istanbul time)
-// ==========================================
-const schedule = { timezone: SETTINGS.TIMEZONE };
-
-cron.schedule('0 22 * * 0', async () => {
-    for (const guild of client.guilds.cache.values()) {
-        const top = await User.find({ weekKey: weekKey(), weeklySec: { $gt: 0 } })
-            .sort({ weeklySec: -1 }).limit(1);
-        if (!top.length) continue;
-
-        const champion = top[0];
-        await User.updateOne({ userId: champion.userId }, { $inc: { balance: SETTINGS.WEEKLY_CHAMPION_BONUS } });
-
-        await send(guild, SETTINGS.GENERAL_CHANNEL, {
-            embeds: [embed('🏆 Weekly Champion',
-                `<@${champion.userId}> is this week's top studier!\n` +
-                `⏱️ **${formatTime(champion.weeklySec)}** studied and **+${SETTINGS.WEEKLY_CHAMPION_BONUS} coins** earned.`, 0xF1C40F)],
-        });
-    }
-}, schedule);
 
 // ==========================================
 // 19) START
