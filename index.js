@@ -833,12 +833,12 @@ async function endSession(guild, userId, name) {
     }
 
     const summary = seconds > 0
-        ? `You studied for **${formatTime(seconds)}** this session`
+        ? `This session: **${formatTime(seconds)}**`
         : 'This session was under 1 second';
 
     await sendDM(guild, userId, {
         embeds: [embed('🔴 You left the room',
-            `${summary}.\n📚 You've studied **${formatTime(todaySec)}** in total today.`, 0xE74C3C)],
+            `${summary}.\n🗂️ Total today: **${formatTime(todaySec)}**.`, 0xE74C3C)],
     });
 
 }
